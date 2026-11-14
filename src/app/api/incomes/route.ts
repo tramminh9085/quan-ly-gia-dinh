@@ -58,10 +58,20 @@ export async function POST(req: NextRequest) {
 
   const title = String(body.title || "").trim();
   const amount = Number(body.amount || 0);
-  const cycle = (body.cycle || "monthly") as "monthly" | "yearly";
+  const cycle = (
+    body.cycle === "yearly"
+      ? "yearly"
+      : body.cycle === "quarterly"
+      ? "quarterly"
+      : "monthly"
+  ) as "monthly" | "quarterly" | "yearly";
   const periodKey =
     String(body.periodKey || "").trim() ||
-    (cycle === "monthly" ? defaults.monthly : defaults.yearly);
+    (cycle === "monthly"
+      ? defaults.monthly
+      : cycle === "quarterly"
+      ? defaults.quarterly
+      : defaults.yearly);
   const receivedBy = Number(body.receivedBy || user?.id || 1);
   const note = String(body.note || "").trim();
 
@@ -102,6 +112,73 @@ export async function POST(req: NextRequest) {
     store.incomes.push(item);
     writeLocalStore(store);
     return NextResponse.json({ ok: true, income: item });
+  }
+}
+
+export async function PUT(req: NextRequest) {
+  await ensureNeonSchema();
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Vui lòng đăng nhập!" }, { status: 401 });
+  }
+  const body = await req.json();
+  const defaults = getCurrentPeriodKeys();
+
+  const id = Number(body.id);
+  const title = String(body.title || "").trim();
+  const amount = Number(body.amount || 0);
+  const cycle = (
+    body.cycle === "yearly"
+      ? "yearly"
+      : body.cycle === "quarterly"
+      ? "quarterly"
+      : "monthly"
+  ) as "monthly" | "quarterly" | "yearly";
+  const periodKey =
+    String(body.periodKey || "").trim() ||
+    (cycle === "monthly"
+      ? defaults.monthly
+      : cycle === "quarterly"
+      ? defaults.quarterly
+      : defaults.yearly);
+  const receivedBy = Number(body.receivedBy || user?.id || 1);
+  const note = String(body.note || "").trim();
+
+  if (!id || !title || amount <= 0) {
+    return NextResponse.json(
+      { error: "Vui lòng nhập đầy đủ thông tin khoản thu hợp lệ!" },
+      { status: 400 }
+    );
+  }
+
+  const db = getDrizzleDb();
+  if (db && isNeonConfigured()) {
+    const updated = await db
+      .update(incomes)
+      .set({ title, amount, cycle, periodKey, receivedBy, note })
+      .where(eq(incomes.id, id))
+      .returning();
+    return NextResponse.json({ ok: true, income: updated[0] });
+  } else {
+    const store = readLocalStore();
+    const idx = store.incomes.findIndex((i) => i.id === id);
+    if (idx === -1) {
+      return NextResponse.json(
+        { error: "Không tìm thấy khoản thu!" },
+        { status: 404 }
+      );
+    }
+    store.incomes[idx] = {
+      ...store.incomes[idx],
+      title,
+      amount,
+      cycle,
+      periodKey,
+      receivedBy,
+      note,
+    };
+    writeLocalStore(store);
+    return NextResponse.json({ ok: true, income: store.incomes[idx] });
   }
 }
 

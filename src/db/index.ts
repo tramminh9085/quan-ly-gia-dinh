@@ -45,7 +45,7 @@ export interface RecurringExpenseRecord {
   id: number;
   title: string;
   amount: number;
-  cycle: "weekly" | "monthly" | "yearly";
+  cycle: "monthly" | "yearly";
   dueDay: number;
   dueMonth: number;
   category: string;
@@ -69,7 +69,7 @@ export interface IncomeRecord {
   id: number;
   title: string;
   amount: number;
-  cycle: "monthly" | "yearly";
+  cycle: "monthly" | "quarterly" | "yearly";
   periodKey: string;
   receivedBy: number | null;
   note: string;
@@ -177,19 +177,6 @@ function createInitialSeedData(): FamilyDatabaseStore {
       },
     ],
     recurringExpenses: [
-      {
-        id: 1,
-        title: "Tiền chợ & Thực phẩm tươi tuần",
-        amount: 1500000,
-        cycle: "weekly",
-        dueDay: 2, // Thứ 2 hàng tuần
-        dueMonth: 1,
-        category: "Sinh hoạt",
-        note: "Đi siêu thị cuối tuần / đầu tuần",
-        isActive: true,
-        createdBy: 1,
-        createdAt: nowIso,
-      },
       {
         id: 2,
         title: "Quỹ lớp & Tiền ăn bán trú 2 con",
@@ -795,6 +782,8 @@ export async function ensureNeonSchema() {
         `;
       }
     } else {
+      // Xóa các khoản đóng định kỳ theo tuần cũ nếu có
+      await sql`DELETE FROM recurring_expenses WHERE cycle = 'weekly'`;
       // Nếu DB đã có dữ liệu cũ chưa khởi tạo Admin, nâng cấp bominh thành Admin và xóa các user mẫu
       const adminCheck = await sql`SELECT COUNT(*)::int AS count FROM users WHERE is_admin = TRUE`;
       if (adminCheck[0]?.count === 0) {
@@ -830,6 +819,12 @@ export function readLocalStore(): FamilyDatabaseStore {
     try {
       const raw = fs.readFileSync(filePath, "utf-8");
       const parsed = JSON.parse(raw) as FamilyDatabaseStore;
+      // Lọc bỏ các khoản đóng theo tuần cũ nếu có
+      if (parsed.recurringExpenses?.some((e) => (e.cycle as string) === "weekly")) {
+        parsed.recurringExpenses = parsed.recurringExpenses.filter(
+          (e) => (e.cycle as string) !== "weekly"
+        );
+      }
       // Nâng cấp store cũ nếu chưa có tài khoản Admin
       if (!parsed.users.some((u) => u.isAdmin)) {
         parsed.users = parsed.users

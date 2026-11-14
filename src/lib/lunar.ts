@@ -328,6 +328,7 @@ export function getNextEventOccurrence(
 export function getCurrentPeriodKeys(date: Date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
+  const quarter = Math.ceil((date.getMonth() + 1) / 3);
 
   // Tính ISO Week
   const temp = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -339,6 +340,7 @@ export function getCurrentPeriodKeys(date: Date = new Date()) {
   return {
     weekly: `${temp.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`,
     monthly: `${year}-${month}`,
+    quarterly: `${year}-Q${quarter}`,
     yearly: `${year}`,
   };
 }

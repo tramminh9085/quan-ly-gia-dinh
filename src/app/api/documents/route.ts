@@ -53,9 +53,9 @@ export async function POST(req: NextRequest) {
   const backImage = String(body.backImage || "");
   const note = String(body.note || "").trim();
 
-  if (!title || !docNumber) {
+  if (!title) {
     return NextResponse.json(
-      { error: "Vui lòng nhập Tên giấy tờ và Số/Mã giấy tờ!" },
+      { error: "Vui lòng nhập Tên giấy tờ!" },
       { status: 400 }
     );
   }
@@ -101,6 +101,91 @@ export async function POST(req: NextRequest) {
     store.personalDocuments.unshift(item);
     writeLocalStore(store);
     return NextResponse.json({ ok: true, document: item });
+  }
+}
+
+export async function PUT(req: NextRequest) {
+  await ensureNeonSchema();
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Vui lòng đăng nhập!" }, { status: 401 });
+  }
+  const body = await req.json();
+
+  const id = Number(body.id);
+  const title = String(body.title || "").trim();
+  const docType = (body.docType || "birth_cert") as
+    | "birth_cert"
+    | "health_ins"
+    | "id_card"
+    | "passport"
+    | "school"
+    | "other";
+  const docNumber = String(body.docNumber || "").trim();
+  const memberId = body.memberId ? Number(body.memberId) : null;
+  const holderName = String(body.holderName || "Thành viên").trim();
+  const issueDate = String(body.issueDate || "").trim();
+  const expiryDate = String(body.expiryDate || "").trim();
+  const issuePlace = String(body.issuePlace || "").trim();
+  const frontImage = String(body.frontImage || "");
+  const backImage = String(body.backImage || "");
+  const note = String(body.note || "").trim();
+
+  if (!id || !title) {
+    return NextResponse.json(
+      { error: "Vui lòng nhập Tên giấy tờ!" },
+      { status: 400 }
+    );
+  }
+
+  const db = getDrizzleDb();
+  if (db && isNeonConfigured()) {
+    const updated = await db
+      .update(personalDocuments)
+      .set({
+        title,
+        docType,
+        docNumber,
+        memberId,
+        holderName,
+        issueDate,
+        expiryDate,
+        issuePlace,
+        frontImage,
+        backImage,
+        note,
+      })
+      .where(eq(personalDocuments.id, id))
+      .returning();
+    return NextResponse.json({ ok: true, document: updated[0] });
+  } else {
+    const store = readLocalStore();
+    const idx = store.personalDocuments.findIndex((d) => d.id === id);
+    if (idx === -1) {
+      return NextResponse.json(
+        { error: "Không tìm thấy giấy tờ!" },
+        { status: 404 }
+      );
+    }
+    store.personalDocuments[idx] = {
+      ...store.personalDocuments[idx],
+      title,
+      docType,
+      docNumber,
+      memberId,
+      holderName,
+      issueDate,
+      expiryDate,
+      issuePlace,
+      frontImage,
+      backImage,
+      note,
+    };
+    writeLocalStore(store);
+    return NextResponse.json({
+      ok: true,
+      document: store.personalDocuments[idx],
+    });
   }
 }
 

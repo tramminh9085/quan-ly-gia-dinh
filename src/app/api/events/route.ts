@@ -134,6 +134,81 @@ export async function POST(req: NextRequest) {
   }
 }
 
+export async function PUT(req: NextRequest) {
+  await ensureNeonSchema();
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Vui lòng đăng nhập!" }, { status: 401 });
+  }
+  const body = await req.json();
+
+  const id = Number(body.id);
+  const title = String(body.title || "").trim();
+  const eventType = (body.eventType || "ancestor") as
+    | "ancestor"
+    | "birthday"
+    | "anniversary"
+    | "holiday"
+    | "other";
+  const calendarType = (body.calendarType || "lunar") as "lunar" | "solar";
+  const day = Number(body.day || 1);
+  const month = Number(body.month || 1);
+  const year = body.year ? Number(body.year) : null;
+  const isRecurring = body.isRecurring !== false;
+  const remindDaysBefore = Number(body.remindDaysBefore || 7);
+  const note = String(body.note || "").trim();
+
+  if (!id || !title || day < 1 || day > 31 || month < 1 || month > 12) {
+    return NextResponse.json(
+      { error: "Vui lòng nhập Tên sự kiện và Ngày/Tháng hợp lệ!" },
+      { status: 400 }
+    );
+  }
+
+  const db = getDrizzleDb();
+  if (db && isNeonConfigured()) {
+    const updated = await db
+      .update(familyEvents)
+      .set({
+        title,
+        eventType,
+        calendarType,
+        day,
+        month,
+        year,
+        isRecurring,
+        remindDaysBefore,
+        note,
+      })
+      .where(eq(familyEvents.id, id))
+      .returning();
+    return NextResponse.json({ ok: true, event: updated[0] });
+  } else {
+    const store = readLocalStore();
+    const idx = store.familyEvents.findIndex((e) => e.id === id);
+    if (idx === -1) {
+      return NextResponse.json(
+        { error: "Không tìm thấy sự kiện!" },
+        { status: 404 }
+      );
+    }
+    store.familyEvents[idx] = {
+      ...store.familyEvents[idx],
+      title,
+      eventType,
+      calendarType,
+      day,
+      month,
+      year,
+      isRecurring,
+      remindDaysBefore,
+      note,
+    };
+    writeLocalStore(store);
+    return NextResponse.json({ ok: true, event: store.familyEvents[idx] });
+  }
+}
+
 export async function DELETE(req: NextRequest) {
   await ensureNeonSchema();
   const user = await getCurrentUser();

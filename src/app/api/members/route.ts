@@ -9,7 +9,11 @@ import {
 } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { getCurrentUser } from "@/lib/auth";
+import {
+  createSessionToken,
+  getCurrentUser,
+  SESSION_COOKIE_NAME,
+} from "@/lib/auth";
 
 export async function GET() {
   await ensureNeonSchema();
@@ -158,6 +162,175 @@ export async function POST(req: NextRequest) {
       },
     });
   }
+}
+
+export async function PUT(req: NextRequest) {
+  await ensureNeonSchema();
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    return NextResponse.json(
+      { error: "Vui lòng đăng nhập trước khi thực hiện!" },
+      { status: 401 }
+    );
+  }
+
+  const body = await req.json();
+  const id = Number(body.id);
+  if (!id) {
+    return NextResponse.json(
+      { error: "Thiếu ID thành viên cần chỉnh sửa!" },
+      { status: 400 }
+    );
+  }
+
+  // Chỉ Admin hoặc chính chủ tài khoản mới được chỉnh sửa / đổi mật khẩu
+  if (!currentUser.isAdmin && currentUser.id !== id) {
+    return NextResponse.json(
+      {
+        error:
+          "Bạn chỉ có quyền chỉnh sửa hoặc đổi mật khẩu cho tài khoản của chính mình!",
+      },
+      { status: 403 }
+    );
+  }
+
+  const fullName = String(body.fullName || "").trim();
+  const username = String(body.username || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+  const roleLabel = String(body.roleLabel || "Thành viên").trim();
+  const avatarColor = String(body.avatarColor || "#2563EB");
+  const newPassword = String(body.newPassword || "").trim();
+
+  if (!fullName || !username) {
+    return NextResponse.json(
+      { error: "Vui lòng nhập đầy đủ Tên hiển thị và Tên đăng nhập!" },
+      { status: 400 }
+    );
+  }
+
+  const db = getDrizzleDb();
+
+  let updatedMember: {
+    id: number;
+    username: string;
+    fullName: string;
+    roleLabel: string;
+    isAdmin: boolean;
+    avatarColor: string;
+  };
+
+  if (db && isNeonConfigured()) {
+    const existingRows = await db.select().from(users).where(eq(users.id, id));
+    const target = existingRows[0];
+    if (!target) {
+      return NextResponse.json(
+        { error: "Không tìm thấy thành viên!" },
+        { status: 404 }
+      );
+    }
+
+    const isTargetAdmin = Boolean(target.isAdmin) || target.username === "bominh";
+    // Không cho đổi username của tài khoản gốc bominh nếu cần giữ quyền hoặc kiểm tra trùng username
+    if (username !== target.username) {
+      const duplicate = await db
+        .select()
+        .from(users)
+        .where(eq(users.username, username));
+      if (duplicate.length > 0) {
+        return NextResponse.json(
+          { error: "Tên đăng nhập mới đã tồn tại trong gia đình!" },
+          { status: 400 }
+        );
+      }
+    }
+
+    const updateValues: Partial<typeof users.$inferInsert> = {
+      fullName,
+      username: currentUser.isAdmin ? username : target.username,
+      roleLabel: currentUser.isAdmin ? roleLabel : target.roleLabel,
+      avatarColor,
+    };
+
+    if (newPassword) {
+      updateValues.passwordHash = bcrypt.hashSync(newPassword, 8);
+    }
+
+    const rows = await db
+      .update(users)
+      .set(updateValues)
+      .where(eq(users.id, id))
+      .returning();
+    const u = rows[0];
+    updatedMember = {
+      id: u.id,
+      username: u.username,
+      fullName: u.fullName,
+      roleLabel: u.roleLabel,
+      isAdmin: Boolean(u.isAdmin) || isTargetAdmin,
+      avatarColor: u.avatarColor,
+    };
+  } else {
+    const store = readLocalStore();
+    const idx = store.users.findIndex((u) => u.id === id);
+    if (idx === -1) {
+      return NextResponse.json(
+        { error: "Không tìm thấy thành viên!" },
+        { status: 404 }
+      );
+    }
+    const target = store.users[idx];
+    const isTargetAdmin = Boolean(target.isAdmin) || target.username === "bominh";
+
+    if (
+      currentUser.isAdmin &&
+      username !== target.username.toLowerCase() &&
+      store.users.some((u) => u.id !== id && u.username.toLowerCase() === username)
+    ) {
+      return NextResponse.json(
+        { error: "Tên đăng nhập mới đã tồn tại trong gia đình!" },
+        { status: 400 }
+      );
+    }
+
+    store.users[idx] = {
+      ...target,
+      fullName,
+      username: currentUser.isAdmin ? username : target.username,
+      roleLabel: currentUser.isAdmin ? roleLabel : target.roleLabel,
+      isAdmin: isTargetAdmin,
+      avatarColor,
+      passwordHash: newPassword
+        ? bcrypt.hashSync(newPassword, 8)
+        : target.passwordHash,
+    };
+    writeLocalStore(store);
+    const u = store.users[idx];
+    updatedMember = {
+      id: u.id,
+      username: u.username,
+      fullName: u.fullName,
+      roleLabel: u.roleLabel,
+      isAdmin: Boolean(u.isAdmin),
+      avatarColor: u.avatarColor,
+    };
+  }
+
+  const res = NextResponse.json({ ok: true, member: updatedMember });
+
+  // Nếu người dùng đang sửa chính tài khoản của mình, làm mới luôn session cookie
+  if (currentUser.id === updatedMember.id) {
+    const token = await createSessionToken(updatedMember);
+    res.cookies.set(SESSION_COOKIE_NAME, token, {
+      httpOnly: true,
+      path: "/",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 30,
+    });
+  }
+
+  return res;
 }
 
 export async function DELETE(req: NextRequest) {

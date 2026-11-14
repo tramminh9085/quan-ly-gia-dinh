@@ -10,6 +10,7 @@ import {
   FileBadge,
   Users,
   Plus,
+  Pencil,
   CheckCircle2,
   Clock,
   Trash2,
@@ -49,7 +50,7 @@ interface ExpenseItem {
   id: number;
   title: string;
   amount: number;
-  cycle: "weekly" | "monthly" | "yearly";
+  cycle: "monthly" | "yearly";
   dueDay: number;
   dueMonth: number;
   category: string;
@@ -76,7 +77,7 @@ interface IncomeItem {
   id: number;
   title: string;
   amount: number;
-  cycle: "monthly" | "yearly";
+  cycle: "monthly" | "quarterly" | "yearly";
   periodKey: string;
   receivedBy: number | null;
   receivedByName: string;
@@ -165,15 +166,58 @@ function formatVND(amount: number): string {
   return new Intl.NumberFormat("vi-VN").format(amount) + " đ";
 }
 
-// Hàm nén ảnh giấy tờ ngay trên trình duyệt để lưu nhẹ nhàng vào DB
+// Hàm chuyển đổi ảnh (kể cả định dạng .HEIC / .HEIF trên iPhone) sang JPEG và nén ngay trên trình duyệt
 async function compressImageFile(file: File): Promise<string> {
+  let targetBlob: Blob = file;
+  const isHeicByNameOrType =
+    /\.(heic|heif)$/i.test(file.name) ||
+    file.type.toLowerCase().includes("heic") ||
+    file.type.toLowerCase().includes("heif");
+
+  let shouldConvertHeic = isHeicByNameOrType;
+  if (!shouldConvertHeic) {
+    try {
+      const { isHeic } = await import("heic-to/next");
+      shouldConvertHeic = await isHeic(file);
+    } catch {
+      shouldConvertHeic = false;
+    }
+  }
+
+  if (shouldConvertHeic) {
+    try {
+      const { heicTo } = await import("heic-to/next");
+      targetBlob = await heicTo({
+        blob: file,
+        type: "image/jpeg",
+        quality: 0.82,
+      });
+    } catch {
+      try {
+        const heic2anyModule = await import("heic2any");
+        const heic2any = heic2anyModule.default || heic2anyModule;
+        const converted = await heic2any({
+          blob: file,
+          toType: "image/jpeg",
+          quality: 0.82,
+        });
+        targetBlob = Array.isArray(converted) ? converted[0] : converted;
+      } catch (err) {
+        console.error("Không thể chuyển đổi file HEIC:", err);
+        throw new Error(
+          "Không thể đọc định dạng ảnh HEIC này. Vui lòng thử lại hoặc chọn ảnh JPG/PNG."
+        );
+      }
+    }
+  }
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (ev) => {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement("canvas");
-        const maxDim = 900;
+        const maxDim = 1000;
         let w = img.width;
         let h = img.height;
         if (w > maxDim || h > maxDim) {
@@ -190,13 +234,14 @@ async function compressImageFile(file: File): Promise<string> {
         const ctx = canvas.getContext("2d");
         if (!ctx) return resolve(String(ev.target?.result || ""));
         ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL("image/jpeg", 0.72));
+        resolve(canvas.toDataURL("image/jpeg", 0.78));
       };
-      img.onerror = reject;
+      img.onerror = () =>
+        reject(new Error("Định dạng ảnh không được trình duyệt hỗ trợ hiển thị."));
       img.src = String(ev.target?.result || "");
     };
     reader.onerror = reject;
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(targetBlob);
   });
 }
 
@@ -214,7 +259,6 @@ export default function FamilyHubPage() {
   const [dbMode, setDbMode] = useState<"neon" | "local">("local");
 
   const defaultPeriods = useMemo(() => getCurrentPeriodKeys(), []);
-  const [weeklyKey, setWeeklyKey] = useState(defaultPeriods.weekly);
   const [monthlyKey, setMonthlyKey] = useState(defaultPeriods.monthly);
   const [yearlyKey, setYearlyKey] = useState(defaultPeriods.yearly);
 
@@ -228,7 +272,7 @@ export default function FamilyHubPage() {
 
   // Filters
   const [expenseCycleFilter, setExpenseCycleFilter] = useState<
-    "all" | "weekly" | "monthly" | "yearly"
+    "all" | "monthly" | "yearly"
   >("all");
   const [scheduleChildFilter, setScheduleChildFilter] = useState<string>("all");
   const [scheduleDayFilter, setScheduleDayFilter] = useState<number>(0); // 0 = Tất cả
@@ -248,21 +292,34 @@ export default function FamilyHubPage() {
     null
   );
 
-  // Modal Form toggles
+  // Modal Form toggles & Editing IDs
   const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [editingExpenseId, setEditingExpenseId] = useState<number | null>(null);
+
   const [showIncomeForm, setShowIncomeForm] = useState(false);
+  const [editingIncomeId, setEditingIncomeId] = useState<number | null>(null);
+
   const [showScheduleForm, setShowScheduleForm] = useState(false);
+  const [editingScheduleId, setEditingScheduleId] = useState<number | null>(
+    null
+  );
+
   const [showEventForm, setShowEventForm] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<number | null>(null);
+
   const [showAccountForm, setShowAccountForm] = useState(false);
+  const [editingAccountId, setEditingAccountId] = useState<number | null>(null);
+
   const [showDocForm, setShowDocForm] = useState(false);
+  const [editingDocId, setEditingDocId] = useState<number | null>(null);
+
   const [showMemberForm, setShowMemberForm] = useState(false);
+  const [editingMemberId, setEditingMemberId] = useState<number | null>(null);
 
   // Form states - Expense
   const [expTitle, setExpTitle] = useState("");
   const [expAmount, setExpAmount] = useState("");
-  const [expCycle, setExpCycle] = useState<"weekly" | "monthly" | "yearly">(
-    "monthly"
-  );
+  const [expCycle, setExpCycle] = useState<"monthly" | "yearly">("monthly");
   const [expDueDay, setExpDueDay] = useState(5);
   const [expDueMonth, setExpDueMonth] = useState(11);
   const [expCategory, setExpCategory] = useState("Sinh hoạt");
@@ -271,7 +328,9 @@ export default function FamilyHubPage() {
   // Form states - Income
   const [incTitle, setIncTitle] = useState("");
   const [incAmount, setIncAmount] = useState("");
-  const [incCycle, setIncCycle] = useState<"monthly" | "yearly">("monthly");
+  const [incCycle, setIncCycle] = useState<"monthly" | "quarterly" | "yearly">(
+    "monthly"
+  );
   const [incReceivedBy, setIncReceivedBy] = useState<number>(1);
   const [incNote, setIncNote] = useState("");
 
@@ -325,13 +384,20 @@ export default function FamilyHubPage() {
   const [docFrontImg, setDocFrontImg] = useState("");
   const [docBackImg, setDocBackImg] = useState("");
   const [docNote, setDocNote] = useState("");
+  const [docImgLoading, setDocImgLoading] = useState(false);
+  const [docFormError, setDocFormError] = useState("");
 
-  // Form states - Member
+  // Form states - Member (Create & Edit)
   const [memUsername, setMemUsername] = useState("");
   const [memFullName, setMemFullName] = useState("");
   const [memRole, setMemRole] = useState("Mẹ");
   const [memPassword, setMemPassword] = useState("123456");
   const [memColor, setMemColor] = useState("#E11D48");
+  const [editMemUsername, setEditMemUsername] = useState("");
+  const [editMemFullName, setEditMemFullName] = useState("");
+  const [editMemRole, setEditMemRole] = useState("");
+  const [editMemColor, setEditMemColor] = useState("#2563EB");
+  const [editMemNewPassword, setEditMemNewPassword] = useState("");
   const [memberError, setMemberError] = useState("");
   const [memberSuccess, setMemberSuccess] = useState("");
 
@@ -372,7 +438,7 @@ export default function FamilyHubPage() {
       const [expRes, incRes, accRes, docRes, evRes, schRes] =
         await Promise.all([
           fetch(
-            `/api/expenses?weeklyKey=${weeklyKey}&monthlyKey=${monthlyKey}&yearlyKey=${yearlyKey}`
+            `/api/expenses?monthlyKey=${monthlyKey}&yearlyKey=${yearlyKey}`
           ).then((r) => r.json()),
           fetch("/api/incomes").then((r) => r.json()),
           fetch("/api/accounts").then((r) => r.json()),
@@ -397,7 +463,7 @@ export default function FamilyHubPage() {
   useEffect(() => {
     loadAllData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weeklyKey, monthlyKey, yearlyKey]);
+  }, [monthlyKey, yearlyKey]);
 
   function copyToClipboard(text: string, key: string) {
     navigator.clipboard.writeText(text);
@@ -409,6 +475,9 @@ export default function FamilyHubPage() {
   const financeSummary = useMemo(() => {
     const monthlyIncomeTotal = incomes
       .filter((i) => i.cycle === "monthly")
+      .reduce((s, i) => s + Number(i.amount), 0);
+    const quarterlyIncomeTotal = incomes
+      .filter((i) => i.cycle === "quarterly")
       .reduce((s, i) => s + Number(i.amount), 0);
     const yearlyIncomeTotal = incomes
       .filter((i) => i.cycle === "yearly")
@@ -426,6 +495,7 @@ export default function FamilyHubPage() {
 
     return {
       monthlyIncomeTotal,
+      quarterlyIncomeTotal,
       yearlyIncomeTotal,
       totalDue,
       totalPaid,
@@ -464,13 +534,38 @@ export default function FamilyHubPage() {
     await loadAllData();
   }
 
-  // Thêm khoản đóng định kỳ
+  // Thêm hoặc sửa khoản đóng định kỳ (Tháng / Năm)
+  function startEditExpense(exp: ExpenseItem) {
+    setEditingExpenseId(exp.id);
+    setExpTitle(exp.title);
+    setExpAmount(String(exp.amount));
+    setExpCycle(exp.cycle === "yearly" ? "yearly" : "monthly");
+    setExpDueDay(exp.dueDay);
+    setExpDueMonth(exp.dueMonth || 1);
+    setExpCategory(exp.category);
+    setExpNote(exp.note || "");
+    setShowExpenseForm(true);
+  }
+
+  function resetExpenseForm() {
+    setEditingExpenseId(null);
+    setExpTitle("");
+    setExpAmount("");
+    setExpCycle("monthly");
+    setExpDueDay(5);
+    setExpDueMonth(11);
+    setExpCategory("Sinh hoạt");
+    setExpNote("");
+    setShowExpenseForm(false);
+  }
+
   async function handleCreateExpense(e: React.FormEvent) {
     e.preventDefault();
     const res = await fetch("/api/expenses", {
-      method: "POST",
+      method: editingExpenseId ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        id: editingExpenseId,
         title: expTitle,
         amount: Number(expAmount),
         cycle: expCycle,
@@ -481,45 +576,90 @@ export default function FamilyHubPage() {
       }),
     });
     if (res.ok) {
-      setExpTitle("");
-      setExpAmount("");
-      setExpNote("");
-      setShowExpenseForm(false);
+      resetExpenseForm();
       await loadAllData();
     }
   }
 
-  // Thêm khoản thu
+  // Thêm hoặc sửa khoản thu
+  function startEditIncome(inc: IncomeItem) {
+    setEditingIncomeId(inc.id);
+    setIncTitle(inc.title);
+    setIncAmount(String(inc.amount));
+    setIncCycle(inc.cycle);
+    setIncReceivedBy(inc.receivedBy || currentUser?.id || 1);
+    setIncNote(inc.note || "");
+    setShowIncomeForm(true);
+  }
+
+  function resetIncomeForm() {
+    setEditingIncomeId(null);
+    setIncTitle("");
+    setIncAmount("");
+    setIncCycle("monthly");
+    setIncNote("");
+    setShowIncomeForm(false);
+  }
+
   async function handleCreateIncome(e: React.FormEvent) {
     e.preventDefault();
     const res = await fetch("/api/incomes", {
-      method: "POST",
+      method: editingIncomeId ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        id: editingIncomeId,
         title: incTitle,
         amount: Number(incAmount),
         cycle: incCycle,
-        periodKey: incCycle === "monthly" ? monthlyKey : yearlyKey,
+        periodKey:
+          incCycle === "monthly"
+            ? monthlyKey
+            : incCycle === "quarterly"
+            ? defaultPeriods.quarterly
+            : yearlyKey,
         receivedBy: incReceivedBy,
         note: incNote,
       }),
     });
     if (res.ok) {
-      setIncTitle("");
-      setIncAmount("");
-      setIncNote("");
-      setShowIncomeForm(false);
+      resetIncomeForm();
       await loadAllData();
     }
   }
 
-  // Thêm lịch học & đưa đón con
+  // Thêm hoặc sửa lịch học & đưa đón con
+  function startEditSchedule(s: KidsScheduleItem) {
+    setEditingScheduleId(s.id);
+    setSchChildName(s.childName);
+    setSchSubject(s.subject);
+    setSchType(s.scheduleType);
+    setSchDay(s.dayOfWeek);
+    setSchStart(s.startTime);
+    setSchEnd(s.endTime);
+    setSchLocation(s.location || "");
+    setSchTeacher(s.teacherInfo || "");
+    setSchDropoffName(s.dropoffName || "");
+    setSchPickupName(s.pickupName || "");
+    setSchNote(s.note || "");
+    setShowScheduleForm(true);
+  }
+
+  function resetScheduleForm() {
+    setEditingScheduleId(null);
+    setSchSubject("");
+    setSchLocation("");
+    setSchTeacher("");
+    setSchNote("");
+    setShowScheduleForm(false);
+  }
+
   async function handleCreateSchedule(e: React.FormEvent) {
     e.preventDefault();
     const res = await fetch("/api/schedules", {
-      method: "POST",
+      method: editingScheduleId ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        id: editingScheduleId,
         childName: schChildName,
         subject: schSubject,
         scheduleType: schType,
@@ -534,22 +674,38 @@ export default function FamilyHubPage() {
       }),
     });
     if (res.ok) {
-      setSchSubject("");
-      setSchLocation("");
-      setSchTeacher("");
-      setSchNote("");
-      setShowScheduleForm(false);
+      resetScheduleForm();
       await loadAllData();
     }
   }
 
-  // Thêm lịch giỗ / sự kiện
+  // Thêm hoặc sửa lịch giỗ / sự kiện
+  function startEditEvent(ev: FamilyEventItem) {
+    setEditingEventId(ev.id);
+    setEvTitle(ev.title);
+    setEvType(ev.eventType);
+    setEvCalType(ev.calendarType);
+    setEvDay(ev.day);
+    setEvMonth(ev.month);
+    setEvRemind(ev.remindDaysBefore || 7);
+    setEvNote(ev.note || "");
+    setShowEventForm(true);
+  }
+
+  function resetEventForm() {
+    setEditingEventId(null);
+    setEvTitle("");
+    setEvNote("");
+    setShowEventForm(false);
+  }
+
   async function handleCreateEvent(e: React.FormEvent) {
     e.preventDefault();
     const res = await fetch("/api/events", {
-      method: "POST",
+      method: editingEventId ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        id: editingEventId,
         title: evTitle,
         eventType: evType,
         calendarType: evCalType,
@@ -560,20 +716,41 @@ export default function FamilyHubPage() {
       }),
     });
     if (res.ok) {
-      setEvTitle("");
-      setEvNote("");
-      setShowEventForm(false);
+      resetEventForm();
       await loadAllData();
     }
   }
 
-  // Thêm tài khoản dùng chung
+  // Thêm hoặc sửa tài khoản dùng chung
+  function startEditAccount(acc: SharedAccountItem) {
+    setEditingAccountId(acc.id);
+    setAccTitle(acc.title);
+    setAccCategory(acc.category);
+    setAccUrl(acc.platformUrl || "");
+    setAccUser(acc.accountUsername);
+    setAccPass(acc.accountPassword);
+    setAccOwner(acc.ownerName || "Cả gia đình");
+    setAccNote(acc.note || "");
+    setShowAccountForm(true);
+  }
+
+  function resetAccountForm() {
+    setEditingAccountId(null);
+    setAccTitle("");
+    setAccUrl("");
+    setAccUser("");
+    setAccPass("");
+    setAccNote("");
+    setShowAccountForm(false);
+  }
+
   async function handleCreateAccount(e: React.FormEvent) {
     e.preventDefault();
     const res = await fetch("/api/accounts", {
-      method: "POST",
+      method: editingAccountId ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        id: editingAccountId,
         title: accTitle,
         category: accCategory,
         platformUrl: accUrl,
@@ -584,23 +761,49 @@ export default function FamilyHubPage() {
       }),
     });
     if (res.ok) {
-      setAccTitle("");
-      setAccUrl("");
-      setAccUser("");
-      setAccPass("");
-      setAccNote("");
-      setShowAccountForm(false);
+      resetAccountForm();
       await loadAllData();
     }
   }
 
-  // Thêm giấy tờ cá nhân
+  // Thêm hoặc sửa giấy tờ cá nhân
+  function startEditDocument(doc: PersonalDocumentItem) {
+    setEditingDocId(doc.id);
+    setDocTitle(doc.title);
+    setDocType(doc.docType);
+    setDocNumber(doc.docNumber || "");
+    setDocHolder(doc.holderName);
+    setDocIssueDate(doc.issueDate || "");
+    setDocExpiryDate(doc.expiryDate || "");
+    setDocIssuePlace(doc.issuePlace || "");
+    setDocFrontImg(doc.frontImage || "");
+    setDocBackImg(doc.backImage || "");
+    setDocNote(doc.note || "");
+    setDocFormError("");
+    setShowDocForm(true);
+  }
+
+  function resetDocumentForm() {
+    setEditingDocId(null);
+    setDocTitle("");
+    setDocNumber("");
+    setDocIssueDate("");
+    setDocExpiryDate("");
+    setDocIssuePlace("");
+    setDocFrontImg("");
+    setDocBackImg("");
+    setDocNote("");
+    setDocFormError("");
+    setShowDocForm(false);
+  }
+
   async function handleCreateDocument(e: React.FormEvent) {
     e.preventDefault();
     const res = await fetch("/api/documents", {
-      method: "POST",
+      method: editingDocId ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        id: editingDocId,
         title: docTitle,
         docType,
         docNumber,
@@ -614,15 +817,7 @@ export default function FamilyHubPage() {
       }),
     });
     if (res.ok) {
-      setDocTitle("");
-      setDocNumber("");
-      setDocIssueDate("");
-      setDocExpiryDate("");
-      setDocIssuePlace("");
-      setDocFrontImg("");
-      setDocBackImg("");
-      setDocNote("");
-      setShowDocForm(false);
+      resetDocumentForm();
       await loadAllData();
     }
   }
@@ -654,6 +849,50 @@ export default function FamilyHubPage() {
     setShowMemberForm(false);
     setMemberSuccess(
       `Đã tạo tài khoản thành công cho ${data.member?.fullName || "thành viên mới"} (@${data.member?.username})!`
+    );
+    await loadAllData();
+  }
+
+  // Sửa thông tin thành viên & đổi mật khẩu
+  function startEditMember(m: Member) {
+    setShowMemberForm(false);
+    setMemberError("");
+    setMemberSuccess("");
+    setEditingMemberId(m.id);
+    setEditMemFullName(m.fullName);
+    setEditMemUsername(m.username);
+    setEditMemRole(m.roleLabel);
+    setEditMemColor(m.avatarColor);
+    setEditMemNewPassword("");
+  }
+
+  async function handleUpdateMember(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingMemberId) return;
+    setMemberError("");
+    setMemberSuccess("");
+
+    const res = await fetch("/api/members", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: editingMemberId,
+        fullName: editMemFullName,
+        username: editMemUsername,
+        roleLabel: editMemRole,
+        avatarColor: editMemColor,
+        newPassword: editMemNewPassword,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setMemberError(data.error || "Không thể cập nhật thông tin thành viên!");
+      return;
+    }
+    setEditingMemberId(null);
+    setEditMemNewPassword("");
+    setMemberSuccess(
+      `Đã cập nhật thông tin${editMemNewPassword ? " & mật khẩu mới" : ""} cho ${data.member?.fullName || "thành viên"}!`
     );
     await loadAllData();
   }
@@ -946,7 +1185,8 @@ export default function FamilyHubPage() {
                   {formatVND(financeSummary.monthlyIncomeTotal)}
                 </div>
                 <div className="text-xs font-extrabold mt-1 text-slate-900">
-                  + Thu theo năm: {formatVND(financeSummary.yearlyIncomeTotal)}
+                  + Quý: {formatVND(financeSummary.quarterlyIncomeTotal)} • Năm:{" "}
+                  {formatVND(financeSummary.yearlyIncomeTotal)}
                 </div>
               </div>
 
@@ -1004,9 +1244,6 @@ export default function FamilyHubPage() {
                   TIẾN ĐỘ ĐÓNG CÁC KHOẢN ĐỊNH KỲ TRONG KỲ ({financeSummary.progressPercent}%)
                 </span>
                 <div className="flex flex-wrap items-center gap-2 text-xs font-black">
-                  <span className="badge-3d bg-slate-100 px-3 py-1">
-                    Tuần: {weeklyKey}
-                  </span>
                   <input
                     type="month"
                     value={monthlyKey}
@@ -1028,20 +1265,27 @@ export default function FamilyHubPage() {
               </div>
             </div>
 
-            {/* KHU VỰC DANH SÁCH KHOẢN ĐÓNG ĐỊNH KỲ (TUẦN / THÁNG / NĂM) */}
+            {/* KHU VỰC DANH SÁCH KHOẢN ĐÓNG ĐỊNH KỲ (THÁNG / NĂM) */}
             <div className="card-3d p-5 md:p-6 bg-white">
               <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
                 <div>
                   <h2 className="text-xl font-black text-slate-950">
-                    CÁC KHOẢN PHẢI ĐÓNG ĐỊNH KỲ (TUẦN / THÁNG / NĂM)
+                    CÁC KHOẢN PHẢI ĐÓNG ĐỊNH KỲ (THÁNG / NĂM)
                   </h2>
                   <p className="text-xs md:text-sm font-bold text-slate-700">
-                    Bấm &ldquo;Đánh dấu Đã đóng&rdquo; khi thanh toán xong để cả nhà cùng biết
+                    Bấm &ldquo;Đánh dấu Đã đóng&rdquo; khi thanh toán xong hoặc bấm &ldquo;Sửa&rdquo; để cập nhật
                   </p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setShowExpenseForm(!showExpenseForm)}
+                  onClick={() => {
+                    if (showExpenseForm && editingExpenseId) {
+                      resetExpenseForm();
+                    } else {
+                      setEditingExpenseId(null);
+                      setShowExpenseForm(!showExpenseForm);
+                    }
+                  }}
                   className="btn-3d bg-emerald-400 hover:bg-emerald-300 text-slate-950 px-4 py-2.5 text-sm"
                 >
                   <Plus className="w-5 h-5" />
@@ -1049,16 +1293,10 @@ export default function FamilyHubPage() {
                 </button>
               </div>
 
-              {/* Bộ lọc Tuần / Tháng / Năm */}
+              {/* Bộ lọc Tháng / Năm */}
               <div className="flex flex-wrap gap-2 mb-5">
                 {[
                   { id: "all", label: `Tất cả (${expenses.length})` },
-                  {
-                    id: "weekly",
-                    label: `Theo Tuần (${
-                      expenses.filter((e) => e.cycle === "weekly").length
-                    })`,
-                  },
                   {
                     id: "monthly",
                     label: `Theo Tháng (${
@@ -1077,7 +1315,7 @@ export default function FamilyHubPage() {
                     type="button"
                     onClick={() =>
                       setExpenseCycleFilter(
-                        f.id as "all" | "weekly" | "monthly" | "yearly"
+                        f.id as "all" | "monthly" | "yearly"
                       )
                     }
                     className={`btn-3d px-4 py-2 text-xs md:text-sm ${
@@ -1091,7 +1329,7 @@ export default function FamilyHubPage() {
                 ))}
               </div>
 
-              {/* Form Thêm Khoản Đóng Định Kỳ */}
+              {/* Form Thêm / Sửa Khoản Đóng Định Kỳ */}
               {showExpenseForm && (
                 <form
                   onSubmit={handleCreateExpense}
@@ -1099,11 +1337,13 @@ export default function FamilyHubPage() {
                 >
                   <div className="flex items-center justify-between">
                     <h3 className="font-black text-base text-slate-950">
-                      ➕ THÊM KHOẢN PHẢI ĐÓNG ĐỊNH KỲ MỚI
+                      {editingExpenseId
+                        ? "✏️ CHỈNH SỬA KHOẢN PHẢI ĐÓNG ĐỊNH KỲ"
+                        : "➕ THÊM KHOẢN PHẢI ĐÓNG ĐỊNH KỲ MỚI (THÁNG / NĂM)"}
                     </h3>
                     <button
                       type="button"
-                      onClick={() => setShowExpenseForm(false)}
+                      onClick={resetExpenseForm}
                       className="text-slate-700 font-black"
                     >
                       <X className="w-5 h-5" />
@@ -1143,33 +1383,47 @@ export default function FamilyHubPage() {
                       <select
                         value={expCycle}
                         onChange={(e) =>
-                          setExpCycle(
-                            e.target.value as "weekly" | "monthly" | "yearly"
-                          )
+                          setExpCycle(e.target.value as "monthly" | "yearly")
                         }
                         className="input-3d"
                       >
-                        <option value="weekly">Hàng Tuần (Weekly)</option>
                         <option value="monthly">Hàng Tháng (Monthly)</option>
                         <option value="yearly">Hàng Năm (Yearly)</option>
                       </select>
                     </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-black mb-1">
-                        {expCycle === "weekly"
-                          ? "THỨ ĐÓNG TRONG TUẦN (2-8)"
-                          : "NGÀY HẠN ĐÓNG (1-31)"}
-                      </label>
-                      <input
-                        type="number"
-                        min={1}
-                        max={31}
-                        value={expDueDay}
-                        onChange={(e) => setExpDueDay(Number(e.target.value))}
-                        className="input-3d"
-                      />
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className={expCycle === "yearly" ? "" : "col-span-2"}>
+                        <label className="block text-xs font-black mb-1">
+                          NGÀY HẠN ĐÓNG (1-31)
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={31}
+                          value={expDueDay}
+                          onChange={(e) => setExpDueDay(Number(e.target.value))}
+                          className="input-3d"
+                        />
+                      </div>
+                      {expCycle === "yearly" && (
+                        <div>
+                          <label className="block text-xs font-black mb-1">
+                            THÁNG ĐÓNG (1-12)
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={12}
+                            value={expDueMonth}
+                            onChange={(e) =>
+                              setExpDueMonth(Number(e.target.value))
+                            }
+                            className="input-3d"
+                          />
+                        </div>
+                      )}
                     </div>
                     <div>
                       <label className="block text-xs font-black mb-1">
@@ -1185,6 +1439,7 @@ export default function FamilyHubPage() {
                         <option value="Học tập">Học phí / Quỹ lớp con</option>
                         <option value="Bảo hiểm">Bảo hiểm / Y tế</option>
                         <option value="Nhà cửa">Phí chung cư / Nhà cửa</option>
+                        <option value="Tiện ích">Tiện ích</option>
                         <option value="Khác">Khoản khác</option>
                       </select>
                     </div>
@@ -1202,11 +1457,22 @@ export default function FamilyHubPage() {
                     </div>
                   </div>
                   <div className="flex justify-end gap-2">
+                    {editingExpenseId && (
+                      <button
+                        type="button"
+                        onClick={resetExpenseForm}
+                        className="btn-3d bg-slate-200 text-slate-900 px-4 py-2.5 text-sm"
+                      >
+                        Hủy
+                      </button>
+                    )}
                     <button
                       type="submit"
                       className="btn-3d bg-blue-600 text-white px-6 py-2.5 text-sm"
                     >
-                      Lưu Khoản Đóng Định Kỳ
+                      {editingExpenseId
+                        ? "Cập Nhật Khoản Đóng"
+                        : "Lưu Khoản Đóng Định Kỳ"}
                     </button>
                   </div>
                 </form>
@@ -1216,13 +1482,7 @@ export default function FamilyHubPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {filteredExpenses.map((exp) => {
                   const cycleBadge =
-                    exp.cycle === "weekly"
-                      ? {
-                          text: "ĐỊNH KỲ TUẦN",
-                          bg: "bg-violet-200 text-slate-950",
-                          dueText: `Thứ ${exp.dueDay} hàng tuần`,
-                        }
-                      : exp.cycle === "monthly"
+                    exp.cycle === "monthly"
                       ? {
                           text: "ĐỊNH KỲ THÁNG",
                           bg: "bg-sky-200 text-slate-950",
@@ -1315,6 +1575,15 @@ export default function FamilyHubPage() {
 
                         <button
                           type="button"
+                          onClick={() => startEditExpense(exp)}
+                          className="btn-3d bg-sky-100 hover:bg-sky-200 text-sky-900 py-2.5 px-3 text-xs"
+                          title="Sửa khoản đóng"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={() => handleDeleteItem("expenses", exp.id)}
                           className="btn-3d bg-rose-100 hover:bg-rose-200 text-rose-900 py-2.5 px-3 text-xs"
                           title="Xóa khoản đóng"
@@ -1341,7 +1610,14 @@ export default function FamilyHubPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setShowIncomeForm(!showIncomeForm)}
+                  onClick={() => {
+                    if (showIncomeForm && editingIncomeId) {
+                      resetIncomeForm();
+                    } else {
+                      setEditingIncomeId(null);
+                      setShowIncomeForm(!showIncomeForm);
+                    }
+                  }}
                   className="btn-3d bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 text-sm"
                 >
                   <Plus className="w-5 h-5" />
@@ -1354,9 +1630,20 @@ export default function FamilyHubPage() {
                   onSubmit={handleCreateIncome}
                   className="card-3d-sm bg-blue-50 p-4 md:p-5 mb-6 space-y-4"
                 >
-                  <h3 className="font-black text-base text-slate-950">
-                    ➕ THÊM KHOẢN THU MỚI (THÁNG / NĂM)
-                  </h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-black text-base text-slate-950">
+                      {editingIncomeId
+                        ? "✏️ CHỈNH SỬA KHOẢN THU"
+                        : "➕ THÊM KHOẢN THU MỚI (THÁNG / NĂM)"}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={resetIncomeForm}
+                      className="text-slate-700 font-black"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
                       <label className="block text-xs font-black mb-1">
@@ -1391,11 +1678,14 @@ export default function FamilyHubPage() {
                       <select
                         value={incCycle}
                         onChange={(e) =>
-                          setIncCycle(e.target.value as "monthly" | "yearly")
+                          setIncCycle(
+                            e.target.value as "monthly" | "quarterly" | "yearly"
+                          )
                         }
                         className="input-3d"
                       >
                         <option value="monthly">Thu Hàng Tháng</option>
+                        <option value="quarterly">Thu Theo Quý</option>
                         <option value="yearly">Thu Hàng Năm</option>
                       </select>
                     </div>
@@ -1418,12 +1708,21 @@ export default function FamilyHubPage() {
                       </select>
                     </div>
                   </div>
-                  <div className="flex justify-end">
+                  <div className="flex justify-end gap-2">
+                    {editingIncomeId && (
+                      <button
+                        type="button"
+                        onClick={resetIncomeForm}
+                        className="btn-3d bg-slate-200 text-slate-900 px-4 py-2.5 text-sm"
+                      >
+                        Hủy
+                      </button>
+                    )}
                     <button
                       type="submit"
                       className="btn-3d bg-emerald-400 text-slate-950 px-6 py-2.5 text-sm"
                     >
-                      Lưu Khoản Thu
+                      {editingIncomeId ? "Cập Nhật Khoản Thu" : "Lưu Khoản Thu"}
                     </button>
                   </div>
                 </form>
@@ -1441,20 +1740,35 @@ export default function FamilyHubPage() {
                           className={`badge-3d px-2.5 py-0.5 text-xs ${
                             inc.cycle === "monthly"
                               ? "bg-emerald-300 text-slate-950"
+                              : inc.cycle === "quarterly"
+                              ? "bg-sky-300 text-slate-950"
                               : "bg-amber-300 text-slate-950"
                           }`}
                         >
                           {inc.cycle === "monthly"
                             ? "THU HÀNG THÁNG"
+                            : inc.cycle === "quarterly"
+                            ? "THU THEO QUÝ"
                             : "THU HÀNG NĂM"}
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteItem("incomes", inc.id)}
-                          className="text-rose-700 hover:text-rose-900"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => startEditIncome(inc)}
+                            className="text-blue-700 hover:text-blue-900"
+                            title="Sửa khoản thu"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteItem("incomes", inc.id)}
+                            className="text-rose-700 hover:text-rose-900"
+                            title="Xóa khoản thu"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                       <h3 className="font-black text-base text-slate-950">
                         {inc.title}
@@ -1494,7 +1808,14 @@ export default function FamilyHubPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setShowScheduleForm(!showScheduleForm)}
+                  onClick={() => {
+                    if (showScheduleForm && editingScheduleId) {
+                      resetScheduleForm();
+                    } else {
+                      setEditingScheduleId(null);
+                      setShowScheduleForm(!showScheduleForm);
+                    }
+                  }}
                   className="btn-3d bg-amber-300 hover:bg-amber-200 text-slate-950 px-4 py-2.5 text-sm"
                 >
                   <Plus className="w-5 h-5" />
@@ -1539,11 +1860,13 @@ export default function FamilyHubPage() {
               >
                 <div className="flex items-center justify-between">
                   <h3 className="font-black text-lg text-slate-950">
-                    ➕ THÊM THỜI KHÓA BIỂU / LỊCH HỌC THÊM & PHÂN CÔNG ĐƯA ĐÓN
+                    {editingScheduleId
+                      ? "✏️ CHỈNH SỬA LỊCH HỌC & PHÂN CÔNG ĐƯA ĐÓN"
+                      : "➕ THÊM THỜI KHÓA BIỂU / LỊCH HỌC THÊM & PHÂN CÔNG ĐƯA ĐÓN"}
                   </h3>
                   <button
                     type="button"
-                    onClick={() => setShowScheduleForm(false)}
+                    onClick={resetScheduleForm}
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -1699,12 +2022,23 @@ export default function FamilyHubPage() {
                   </div>
                 </div>
 
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-2">
+                  {editingScheduleId && (
+                    <button
+                      type="button"
+                      onClick={resetScheduleForm}
+                      className="btn-3d bg-slate-200 text-slate-900 px-4 py-2.5 text-sm"
+                    >
+                      Hủy
+                    </button>
+                  )}
                   <button
                     type="submit"
                     className="btn-3d bg-blue-600 text-white px-6 py-2.5 text-sm"
                   >
-                    Lưu Lịch Học & Đưa Đón
+                    {editingScheduleId
+                      ? "Cập Nhật Lịch Học & Đưa Đón"
+                      : "Lưu Lịch Học & Đưa Đón"}
                   </button>
                 </div>
               </form>
@@ -1787,15 +2121,26 @@ export default function FamilyHubPage() {
                               {typeBadge.label}
                             </span>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleDeleteItem("schedules", item.id)
-                            }
-                            className="text-rose-600 hover:text-rose-800"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => startEditSchedule(item)}
+                              className="text-blue-600 hover:text-blue-800"
+                              title="Sửa lịch học"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleDeleteItem("schedules", item.id)
+                              }
+                              className="text-rose-600 hover:text-rose-800"
+                              title="Xóa lịch học"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
 
                         <div className="text-xs font-black uppercase text-blue-700">
@@ -1874,7 +2219,14 @@ export default function FamilyHubPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setShowEventForm(!showEventForm)}
+                  onClick={() => {
+                    if (showEventForm && editingEventId) {
+                      resetEventForm();
+                    } else {
+                      setEditingEventId(null);
+                      setShowEventForm(!showEventForm);
+                    }
+                  }}
                   className="btn-3d bg-rose-500 hover:bg-rose-400 text-white px-4 py-2.5 text-sm"
                 >
                   <Plus className="w-5 h-5" />
@@ -1889,11 +2241,13 @@ export default function FamilyHubPage() {
                 >
                   <div className="flex items-center justify-between">
                     <h3 className="font-black text-base text-slate-950">
-                      ➕ THÊM NGÀY GIỖ HOẶC SỰ KIỆN GIA ĐÌNH
+                      {editingEventId
+                        ? "✏️ CHỈNH SỬA NGÀY GIỖ HOẶC SỰ KIỆN GIA ĐÌNH"
+                        : "➕ THÊM NGÀY GIỖ HOẶC SỰ KIỆN GIA ĐÌNH"}
                     </h3>
                     <button
                       type="button"
-                      onClick={() => setShowEventForm(false)}
+                      onClick={resetEventForm}
                     >
                       <X className="w-5 h-5" />
                     </button>
@@ -2008,12 +2362,23 @@ export default function FamilyHubPage() {
                       />
                     </div>
                   </div>
-                  <div className="flex justify-end">
+                  <div className="flex justify-end gap-2">
+                    {editingEventId && (
+                      <button
+                        type="button"
+                        onClick={resetEventForm}
+                        className="btn-3d bg-slate-200 text-slate-900 px-4 py-2.5 text-sm"
+                      >
+                        Hủy
+                      </button>
+                    )}
                     <button
                       type="submit"
                       className="btn-3d bg-rose-500 text-white px-6 py-2.5 text-sm"
                     >
-                      Lưu Lịch Giỗ / Sự Kiện
+                      {editingEventId
+                        ? "Cập Nhật Lịch Giỗ / Sự Kiện"
+                        : "Lưu Lịch Giỗ / Sự Kiện"}
                     </button>
                   </div>
                 </form>
@@ -2065,8 +2430,17 @@ export default function FamilyHubPage() {
                             </span>
                             <button
                               type="button"
+                              onClick={() => startEditEvent(ev)}
+                              className="text-blue-700 hover:text-blue-900"
+                              title="Sửa sự kiện"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => handleDeleteItem("events", ev.id)}
                               className="text-rose-700 hover:text-rose-900"
+                              title="Xóa sự kiện"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -2164,7 +2538,14 @@ export default function FamilyHubPage() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setShowAccountForm(!showAccountForm)}
+                    onClick={() => {
+                      if (showAccountForm && editingAccountId) {
+                        resetAccountForm();
+                      } else {
+                        setEditingAccountId(null);
+                        setShowAccountForm(!showAccountForm);
+                      }
+                    }}
                     className="btn-3d bg-violet-500 hover:bg-violet-400 text-white px-4 py-2.5 text-sm"
                   >
                     <Plus className="w-5 h-5" />
@@ -2200,9 +2581,19 @@ export default function FamilyHubPage() {
                     onSubmit={handleCreateAccount}
                     className="card-3d-sm bg-violet-50 p-4 md:p-5 mb-6 space-y-4"
                   >
-                    <h3 className="font-black text-base text-slate-950">
-                      ➕ THÊM TÀI KHOẢN LỚP HỌC / CUỘC THI / TIỆN ÍCH
-                    </h3>
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-black text-base text-slate-950">
+                        {editingAccountId
+                          ? "✏️ CHỈNH SỬA TÀI KHOẢN DÙNG CHUNG"
+                          : "➕ THÊM TÀI KHOẢN LỚP HỌC / CUỘC THI / TIỆN ÍCH"}
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={resetAccountForm}
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-xs font-black mb-1">
@@ -2308,12 +2699,23 @@ export default function FamilyHubPage() {
                         className="input-3d"
                       />
                     </div>
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-2">
+                      {editingAccountId && (
+                        <button
+                          type="button"
+                          onClick={resetAccountForm}
+                          className="btn-3d bg-slate-200 text-slate-900 px-5 py-2.5 text-sm"
+                        >
+                          Hủy
+                        </button>
+                      )}
                       <button
                         type="submit"
                         className="btn-3d bg-violet-600 text-white px-6 py-2.5 text-sm"
                       >
-                        Lưu Vào Kho Tài Khoản
+                        {editingAccountId
+                          ? "Lưu Thay Đổi"
+                          : "Lưu Vào Kho Tài Khoản"}
                       </button>
                     </div>
                   </form>
@@ -2332,15 +2734,26 @@ export default function FamilyHubPage() {
                             <span className="badge-3d bg-violet-200 text-slate-950 px-3 py-0.5 text-xs">
                               👤 {acc.ownerName}
                             </span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleDeleteItem("accounts", acc.id)
-                              }
-                              className="text-rose-600 hover:text-rose-800"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => startEditAccount(acc)}
+                                className="text-blue-600 hover:text-blue-800"
+                                title="Sửa tài khoản"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleDeleteItem("accounts", acc.id)
+                                }
+                                className="text-rose-600 hover:text-rose-800"
+                                title="Xóa tài khoản"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </div>
 
                           <h3 className="text-lg font-black text-slate-950">
@@ -2469,7 +2882,14 @@ export default function FamilyHubPage() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setShowDocForm(!showDocForm)}
+                    onClick={() => {
+                      if (showDocForm && editingDocId) {
+                        resetDocumentForm();
+                      } else {
+                        setEditingDocId(null);
+                        setShowDocForm(!showDocForm);
+                      }
+                    }}
                     className="btn-3d bg-amber-400 hover:bg-amber-300 text-slate-950 px-4 py-2.5 text-sm"
                   >
                     <Plus className="w-5 h-5" />
@@ -2503,9 +2923,19 @@ export default function FamilyHubPage() {
                     onSubmit={handleCreateDocument}
                     className="card-3d-sm bg-amber-50 p-4 md:p-5 mb-6 space-y-4"
                   >
-                    <h3 className="font-black text-base text-slate-950">
-                      ➕ THÊM GIẤY TỜ CÁ NHÂN MỚI (CÓ THỂ ĐÍNH KÈM ẢNH CHỤP)
-                    </h3>
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-black text-base text-slate-950">
+                        {editingDocId
+                          ? "✏️ CHỈNH SỬA HỒ SƠ GIẤY TỜ CÁ NHÂN"
+                          : "➕ THÊM GIẤY TỜ CÁ NHÂN MỚI (CÓ THỂ ĐÍNH KÈM ẢNH CHỤP)"}
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={resetDocumentForm}
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-xs font-black mb-1">
@@ -2565,12 +2995,11 @@ export default function FamilyHubPage() {
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       <div>
                         <label className="block text-xs font-black mb-1">
-                          SỐ GIẤY TỜ / MÃ SỐ THẺ *
+                          SỐ GIẤY TỜ / MÃ SỐ THẺ (TÙY CHỌN)
                         </label>
                         <input
                           type="text"
-                          required
-                          placeholder="VD: HS4797938291..."
+                          placeholder="VD: HS4797938291... (Có thể bỏ trống)"
                           value={docNumber}
                           onChange={(e) => setDocNumber(e.target.value)}
                           className="input-3d"
@@ -2617,37 +3046,93 @@ export default function FamilyHubPage() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-xs font-black mb-1">
-                          📷 ẢNH MẶT TRƯỚC (TÙY CHỌN)
+                          📷 ẢNH MẶT TRƯỚC (HỖ TRỢ JPG, PNG, .HEIC)
                         </label>
                         <input
                           type="file"
-                          accept="image/*"
+                          accept="image/*,.heic,.heif"
                           onChange={async (e) => {
                             const f = e.target.files?.[0];
                             if (f) {
-                              const dataUrl = await compressImageFile(f);
-                              setDocFrontImg(dataUrl);
+                              setDocFormError("");
+                              setDocImgLoading(true);
+                              try {
+                                const dataUrl = await compressImageFile(f);
+                                setDocFrontImg(dataUrl);
+                              } catch (err) {
+                                setDocFormError(
+                                  err instanceof Error
+                                    ? err.message
+                                    : "Không thể xử lý ảnh mặt trước."
+                                );
+                              } finally {
+                                setDocImgLoading(false);
+                              }
                             }
                           }}
                           className="input-3d text-xs"
                         />
+                        {docFrontImg && (
+                          <div className="mt-2 relative inline-block">
+                            <img
+                              src={docFrontImg}
+                              alt="Xem trước mặt trước"
+                              className="h-24 w-auto rounded-lg border-2 border-slate-950 object-cover"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setDocFrontImg("")}
+                              className="badge-3d bg-rose-500 text-white px-2 py-0.5 text-[10px] mt-1"
+                            >
+                              Xóa ảnh mặt trước
+                            </button>
+                          </div>
+                        )}
                       </div>
                       <div>
                         <label className="block text-xs font-black mb-1">
-                          📷 ẢNH MẶT SAU (TÙY CHỌN)
+                          📷 ẢNH MẶT SAU (HỖ TRỢ JPG, PNG, .HEIC)
                         </label>
                         <input
                           type="file"
-                          accept="image/*"
+                          accept="image/*,.heic,.heif"
                           onChange={async (e) => {
                             const f = e.target.files?.[0];
                             if (f) {
-                              const dataUrl = await compressImageFile(f);
-                              setDocBackImg(dataUrl);
+                              setDocFormError("");
+                              setDocImgLoading(true);
+                              try {
+                                const dataUrl = await compressImageFile(f);
+                                setDocBackImg(dataUrl);
+                              } catch (err) {
+                                setDocFormError(
+                                  err instanceof Error
+                                    ? err.message
+                                    : "Không thể xử lý ảnh mặt sau."
+                                );
+                              } finally {
+                                setDocImgLoading(false);
+                              }
                             }
                           }}
                           className="input-3d text-xs"
                         />
+                        {docBackImg && (
+                          <div className="mt-2 relative inline-block">
+                            <img
+                              src={docBackImg}
+                              alt="Xem trước mặt sau"
+                              className="h-24 w-auto rounded-lg border-2 border-slate-950 object-cover"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setDocBackImg("")}
+                              className="badge-3d bg-rose-500 text-white px-2 py-0.5 text-[10px] mt-1"
+                            >
+                              Xóa ảnh mặt sau
+                            </button>
+                          </div>
+                        )}
                       </div>
                       <div>
                         <label className="block text-xs font-black mb-1">
@@ -2663,12 +3148,38 @@ export default function FamilyHubPage() {
                       </div>
                     </div>
 
-                    <div className="flex justify-end">
+                    {docImgLoading && (
+                      <div className="card-3d-sm bg-sky-100 p-3 text-xs font-black text-slate-900">
+                        ⏳ Đang chuyển đổi & nén ảnh (hỗ trợ cả định dạng .HEIC)... Vui lòng đợi trong giây lát!
+                      </div>
+                    )}
+
+                    {docFormError && (
+                      <div className="card-3d-sm bg-rose-100 p-3 text-xs font-black text-rose-900">
+                        ⚠️ {docFormError}
+                      </div>
+                    )}
+
+                    <div className="flex justify-end gap-2">
+                      {editingDocId && (
+                        <button
+                          type="button"
+                          onClick={resetDocumentForm}
+                          className="btn-3d bg-slate-200 text-slate-900 px-5 py-2.5 text-sm"
+                        >
+                          Hủy
+                        </button>
+                      )}
                       <button
                         type="submit"
-                        className="btn-3d bg-blue-600 text-white px-6 py-2.5 text-sm"
+                        disabled={docImgLoading}
+                        className="btn-3d bg-blue-600 text-white px-6 py-2.5 text-sm disabled:opacity-50"
                       >
-                        Lưu Hồ Sơ Giấy Tờ
+                        {docImgLoading
+                          ? "Đang xử lý ảnh..."
+                          : editingDocId
+                          ? "Lưu Thay Đổi"
+                          : "Lưu Hồ Sơ Giấy Tờ"}
                       </button>
                     </div>
                   </form>
@@ -2685,15 +3196,26 @@ export default function FamilyHubPage() {
                           <span className="badge-3d bg-amber-300 text-slate-950 px-3 py-0.5 text-xs">
                             👤 {doc.holderName}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleDeleteItem("documents", doc.id)
-                            }
-                            className="text-rose-600 hover:text-rose-800"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => startEditDocument(doc)}
+                              className="text-blue-600 hover:text-blue-800"
+                              title="Sửa giấy tờ"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleDeleteItem("documents", doc.id)
+                              }
+                              className="text-rose-600 hover:text-rose-800"
+                              title="Xóa giấy tờ"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
 
                         <h3 className="text-lg font-black text-slate-950">
@@ -2706,28 +3228,30 @@ export default function FamilyHubPage() {
                               SỐ GIẤY TỜ / MÃ SỐ THẺ
                             </div>
                             <div className="font-black text-base text-blue-800 select-all">
-                              {doc.docNumber}
+                              {doc.docNumber || "Chưa cập nhật"}
                             </div>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              copyToClipboard(doc.docNumber, `doc-${doc.id}`)
-                            }
-                            className="btn-3d bg-white px-3 py-1.5 text-xs"
-                          >
-                            {copiedKey === `doc-${doc.id}` ? (
-                              <>
-                                <Check className="w-3.5 h-3.5 text-emerald-600" />
-                                Đã chép
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="w-3.5 h-3.5" />
-                                Chép số
-                              </>
-                            )}
-                          </button>
+                          {doc.docNumber && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                copyToClipboard(doc.docNumber, `doc-${doc.id}`)
+                              }
+                              className="btn-3d bg-white px-3 py-1.5 text-xs"
+                            >
+                              {copiedKey === `doc-${doc.id}` ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                  Đã chép
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3.5 h-3.5" />
+                                  Chép số
+                                </>
+                              )}
+                            </button>
+                          )}
                         </div>
 
                         <div className="grid grid-cols-2 gap-2 mt-3 text-xs font-bold text-slate-800">
@@ -2784,6 +3308,7 @@ export default function FamilyHubPage() {
                   <button
                     type="button"
                     onClick={() => {
+                      setEditingMemberId(null);
                       setShowMemberForm(!showMemberForm);
                       setMemberError("");
                       setMemberSuccess("");
@@ -2798,7 +3323,7 @@ export default function FamilyHubPage() {
 
               {!currentUser?.isAdmin && (
                 <div className="card-3d-sm bg-amber-50 p-3.5 mb-5 text-xs font-extrabold text-slate-900">
-                  🔒 Để đảm bảo bảo mật gia đình, tính năng tự tạo tài khoản đã được khóa. Chỉ tài khoản Quản trị viên (<span className="underline">Bố Minh - @bominh</span>) mới có quyền cấp tài khoản mới.
+                  🔒 Để đảm bảo bảo mật gia đình, tính năng tự tạo tài khoản đã được khóa. Chỉ tài khoản Quản trị viên (<span className="underline">Bố Minh - @bominh</span>) mới có quyền cấp tài khoản mới. Bạn có thể tự sửa thông tin hoặc đổi mật khẩu tài khoản của mình bên dưới.
                 </div>
               )}
 
@@ -2918,10 +3443,125 @@ export default function FamilyHubPage() {
                 </form>
               )}
 
+              {editingMemberId && (
+                <form
+                  onSubmit={handleUpdateMember}
+                  className="card-3d-sm bg-sky-50 p-4 md:p-5 mb-6 space-y-4"
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-black text-base text-slate-950">
+                      ✏️ CHỈNH SỬA THÔNG TIN & ĐỔI MẬT KHẨU THÀNH VIÊN
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setEditingMemberId(null)}
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                      <label className="block text-xs font-black mb-1">
+                        TÊN HIỂN THỊ *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="VD: Bố Minh, Mẹ Lan..."
+                        value={editMemFullName}
+                        onChange={(e) => setEditMemFullName(e.target.value)}
+                        className="input-3d"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-black mb-1">
+                        TÊN ĐĂNG NHẬP (ID) *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        disabled={!currentUser?.isAdmin}
+                        value={editMemUsername}
+                        onChange={(e) => setEditMemUsername(e.target.value)}
+                        className="input-3d disabled:opacity-60"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-black mb-1">
+                        VAI TRÒ TRONG NHÀ
+                      </label>
+                      <input
+                        type="text"
+                        disabled={!currentUser?.isAdmin}
+                        value={editMemRole}
+                        onChange={(e) => setEditMemRole(e.target.value)}
+                        className="input-3d disabled:opacity-60"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-black mb-1">
+                        ĐỔI MẬT KHẨU MỚI (ĐỂ TRỐNG NẾU GIỮ NGUYÊN)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Nhập mật khẩu mới nếu muốn đổi..."
+                        value={editMemNewPassword}
+                        onChange={(e) => setEditMemNewPassword(e.target.value)}
+                        className="input-3d"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black text-slate-950">
+                        MÀU ĐẠI DIỆN:
+                      </span>
+                      {[
+                        "#2563EB",
+                        "#E11D48",
+                        "#10B981",
+                        "#F59E0B",
+                        "#7C3AED",
+                        "#0D9488",
+                      ].map((color) => (
+                        <button
+                          key={color}
+                          type="button"
+                          onClick={() => setEditMemColor(color)}
+                          className={`w-7 h-7 rounded-full border-2 border-slate-950 transition-transform ${
+                            editMemColor === color
+                              ? "scale-125 ring-2 ring-offset-1 ring-slate-950"
+                              : "opacity-75"
+                          }`}
+                          style={{ backgroundColor: color }}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditingMemberId(null)}
+                        className="btn-3d bg-slate-200 text-slate-900 px-5 py-2.5 text-sm"
+                      >
+                        Hủy
+                      </button>
+                      <button
+                        type="submit"
+                        className="btn-3d bg-blue-600 text-white px-6 py-2.5 text-sm"
+                      >
+                        Lưu Cập Nhật / Mật Khẩu
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 {members.map((m) => {
                   const isMemberAdmin =
                     Boolean(m.isAdmin) || m.username === "bominh";
+                  const canEditMember =
+                    Boolean(currentUser?.isAdmin) || currentUser?.id === m.id;
                   return (
                     <div
                       key={m.id}
@@ -2953,13 +3593,24 @@ export default function FamilyHubPage() {
                       </div>
 
                       <div className="w-full pt-2 mt-1 border-t border-dashed border-slate-200 flex flex-col gap-2">
-                        {currentUser?.id === m.id ? (
-                          <div className="badge-3d w-full py-2 text-xs bg-emerald-400 text-slate-950 text-center">
+                        {currentUser?.id === m.id && (
+                          <div className="badge-3d w-full py-1.5 text-xs bg-emerald-400 text-slate-950 text-center">
                             ✓ Đang đăng nhập
                           </div>
-                        ) : (
-                          currentUser?.isAdmin &&
-                          !isMemberAdmin && (
+                        )}
+                        {canEditMember && (
+                          <button
+                            type="button"
+                            onClick={() => startEditMember(m)}
+                            className="btn-3d w-full py-2 text-xs bg-sky-100 hover:bg-sky-200 text-slate-950"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                            Sửa / Đổi mật khẩu
+                          </button>
+                        )}
+                        {currentUser?.isAdmin &&
+                          !isMemberAdmin &&
+                          currentUser?.id !== m.id && (
                             <button
                               type="button"
                               onClick={() => handleDeleteItem("members", m.id)}
@@ -2968,8 +3619,7 @@ export default function FamilyHubPage() {
                               <Trash2 className="w-3.5 h-3.5" />
                               Xóa tài khoản này
                             </button>
-                          )
-                        )}
+                          )}
                       </div>
                     </div>
                   );
