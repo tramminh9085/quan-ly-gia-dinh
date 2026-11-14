@@ -12,6 +12,8 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
+  Sun,
+  Moon,
 } from "lucide-react";
 
 export default function LoginPage() {
@@ -21,6 +23,36 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem("family_theme_mode");
+      if (saved === "light") {
+        setTheme("light");
+        document.documentElement.classList.remove("dark");
+      } else {
+        setTheme("dark");
+        document.documentElement.classList.add("dark");
+      }
+    } catch {
+      setTheme("dark");
+      document.documentElement.classList.add("dark");
+    }
+  }, []);
+
+  function toggleTheme() {
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    setTheme(nextTheme);
+    try {
+      localStorage.setItem("family_theme_mode", nextTheme);
+      if (nextTheme === "dark") {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    } catch {}
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -73,8 +105,40 @@ export default function LoginPage() {
         </div>
 
         {/* Form Đăng nhập Bảo mật */}
-        <div className="card-3d p-6 md:p-8 bg-white">
-          <div className="flex items-center gap-3.5 pb-5 mb-5 border-b border-slate-200">
+        <div className="card-3d p-6 md:p-8 bg-white relative">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={
+              theme === "dark"
+                ? "Chuyển sang giao diện Sáng"
+                : "Chuyển sang giao diện Tối"
+            }
+            title={
+              theme === "dark"
+                ? "Chuyển sang Giao diện Sáng (Light Mode)"
+                : "Chuyển sang Giao diện Tối (Dark Mode)"
+            }
+            className={`btn-3d absolute top-6 right-6 px-2.5 py-1 text-xs ${
+              theme === "dark"
+                ? "bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700"
+                : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300"
+            }`}
+          >
+            {theme === "dark" ? (
+              <>
+                <Sun className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
+                <span className="font-bold">Sáng</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
+                <span className="font-bold">Tối</span>
+              </>
+            )}
+          </button>
+
+          <div className="flex items-center gap-3.5 pb-5 mb-5 border-b border-slate-200 pr-20">
             <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-200 shrink-0">
               <LogIn className="w-5 h-5" aria-hidden="true" />
             </div>

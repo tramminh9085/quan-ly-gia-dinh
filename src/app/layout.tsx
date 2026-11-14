@@ -29,7 +29,23 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="vi" className={beVietnamPro.variable}>
+    <html lang="vi" className={`${beVietnamPro.variable} dark`} suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                const savedTheme = localStorage.getItem('family_theme_mode');
+                if (savedTheme === 'light') {
+                  document.documentElement.classList.remove('dark');
+                } else {
+                  document.documentElement.classList.add('dark');
+                }
+              } catch (e) {}
+            `,
+          }}
+        />
+      </head>
       <body className="min-h-screen antialiased selection:bg-blue-600 selection:text-white">
         {children}
       </body>

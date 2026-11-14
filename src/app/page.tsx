@@ -350,6 +350,36 @@ export default function FamilyHubPage() {
   >([]);
   const [notifStatusMsg, setNotifStatusMsg] = useState("");
   const [isAppShell, setIsAppShell] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("family_theme_mode");
+      if (saved === "light") {
+        setTheme("light");
+        document.documentElement.classList.remove("dark");
+      } else {
+        setTheme("dark");
+        document.documentElement.classList.add("dark");
+      }
+    } catch {
+      setTheme("dark");
+      document.documentElement.classList.add("dark");
+    }
+  }, []);
+
+  function toggleTheme() {
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    setTheme(nextTheme);
+    try {
+      localStorage.setItem("family_theme_mode", nextTheme);
+      if (nextTheme === "dark") {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    } catch {}
+  }
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1206,6 +1236,39 @@ export default function FamilyHubPage() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {/* Nút chuyển đổi Dark Mode / Light Mode (Mặc định: Dark Mode) */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              aria-label={
+                theme === "dark"
+                  ? "Chuyển sang giao diện Sáng (Light Mode)"
+                  : "Chuyển sang giao diện Tối (Dark Mode)"
+              }
+              title={
+                theme === "dark"
+                  ? "Chuyển sang Giao diện Sáng (Light Mode)"
+                  : "Chuyển sang Giao diện Tối (Dark Mode)"
+              }
+              className={`btn-3d px-2.5 py-1.5 md:px-3 md:py-2 text-xs md:text-sm ${
+                theme === "dark"
+                  ? "bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700"
+                  : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300"
+              }`}
+            >
+              {theme === "dark" ? (
+                <>
+                  <Sun className="w-4 h-4 text-amber-400" aria-hidden="true" />
+                  <span className="hidden sm:inline font-bold">Sáng</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="w-4 h-4 text-indigo-600" aria-hidden="true" />
+                  <span className="hidden sm:inline font-bold">Tối</span>
+                </>
+              )}
+            </button>
+
             <button
               type="button"
               onClick={() => {
