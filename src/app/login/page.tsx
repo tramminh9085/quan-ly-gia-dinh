@@ -51,7 +51,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col justify-center items-center p-4 md:p-8">
+    <div className="min-h-screen flex flex-col justify-center items-center p-4 md:p-8 pt-[max(env(safe-area-inset-top,0px),36px)] pb-[max(env(safe-area-inset-bottom,0px),16px)]">
       <div className="w-full max-w-xl space-y-5">
         {/* Header Brand Card (Soft UI Evolution) */}
         <div className="card-3d bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-700 text-white p-6 md:p-7 flex items-center gap-4 border-blue-500/30 shadow-xl shadow-blue-900/10">

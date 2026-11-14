@@ -349,6 +349,20 @@ export default function FamilyHubPage() {
     UpcomingReminderPreview[]
   >([]);
   const [notifStatusMsg, setNotifStatusMsg] = useState("");
+  const [isAppShell, setIsAppShell] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const isCapacitor = Boolean(
+      (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } })
+        .Capacitor?.isNativePlatform?.()
+    );
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches;
+    const isAndroidWV = /wv|Android.*Version\/[\d.]+/i.test(navigator.userAgent);
+    if (isCapacitor || isStandalone || isAndroidWV) {
+      setIsAppShell(true);
+    }
+  }, []);
 
   // Modal Form toggles & Editing IDs
   const [showExpenseForm, setShowExpenseForm] = useState(false);
@@ -1164,7 +1178,12 @@ export default function FamilyHubPage() {
     <div className="min-h-screen pb-28 md:pb-12">
       {/* TOP BAR GỌN NHẸ (TỰ ĐỘNG ẨN KHI CUỘN HOẶC XEM CHI TIẾT) */}
       <header
-        className={`sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200/80 shadow-xs transition-all duration-300 ease-in-out ${
+        style={{
+          paddingTop: isAppShell
+            ? "max(env(safe-area-inset-top, 0px), 38px)"
+            : "max(env(safe-area-inset-top, 0px), 0px)",
+        }}
+        className={`sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs transition-all duration-300 ease-in-out ${
           shouldHideTopbar
             ? "-translate-y-full opacity-0 pointer-events-none"
             : "translate-y-0 opacity-100"
@@ -4668,6 +4687,11 @@ export default function FamilyHubPage() {
 
       {/* THANH ĐIỀU HƯỚNG ĐÁY (BOTTOM NAV) CHUẨN ANDROID APK / MOBILE */}
       <nav
+        style={{
+          paddingBottom: isAppShell
+            ? "max(env(safe-area-inset-bottom, 0px), 16px)"
+            : "max(env(safe-area-inset-bottom, 0px), 8px)",
+        }}
         aria-label="Điều hướng di động"
         className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-2 py-2 grid grid-cols-5 gap-1 shadow-lg"
       >

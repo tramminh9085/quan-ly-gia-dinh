@@ -208,3 +208,18 @@ textarea:focus-visible {
     transform: none !important;
   }
 }
+
+/* Safe Area Insets for Mobile App Status Bar & Gesture Navigation */
+:root {
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.safe-top-bar {
+  padding-top: max(env(safe-area-inset-top, 0px), 36px);
+}
+
+.safe-bottom-nav {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 14px);
+}
+
