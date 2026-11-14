@@ -12,6 +12,7 @@ export interface SessionUser {
   username: string;
   fullName: string;
   roleLabel: string;
+  isAdmin: boolean;
   avatarColor: string;
 }
 
@@ -28,11 +29,13 @@ export async function verifySessionToken(
 ): Promise<SessionUser | null> {
   try {
     const { payload } = await jwtVerify(token, SECRET_KEY);
+    const username = String(payload.username);
     return {
       id: Number(payload.id),
-      username: String(payload.username),
+      username,
       fullName: String(payload.fullName),
       roleLabel: String(payload.roleLabel || "Thành viên"),
+      isAdmin: Boolean(payload.isAdmin) || username === "bominh",
       avatarColor: String(payload.avatarColor || "#2563EB"),
     };
   } catch {

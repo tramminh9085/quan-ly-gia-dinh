@@ -9,9 +9,18 @@ import {
 } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { getCurrentUser } from "@/lib/auth";
 
 export async function GET() {
   await ensureNeonSchema();
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    return NextResponse.json(
+      { error: "Vui lòng đăng nhập để xem danh sách thành viên!" },
+      { status: 401 }
+    );
+  }
+
   const db = getDrizzleDb();
   if (db && isNeonConfigured()) {
     const rows = await db.select().from(users);
@@ -21,6 +30,7 @@ export async function GET() {
         username: u.username,
         fullName: u.fullName,
         roleLabel: u.roleLabel,
+        isAdmin: Boolean(u.isAdmin) || u.username === "bominh",
         avatarColor: u.avatarColor,
         createdAt: u.createdAt,
       })),
@@ -33,6 +43,7 @@ export async function GET() {
       username: u.username,
       fullName: u.fullName,
       roleLabel: u.roleLabel,
+      isAdmin: Boolean(u.isAdmin) || u.username === "bominh",
       avatarColor: u.avatarColor,
       createdAt: u.createdAt,
     })),
@@ -41,6 +52,23 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   await ensureNeonSchema();
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    return NextResponse.json(
+      { error: "Vui lòng đăng nhập trước khi thực hiện!" },
+      { status: 401 }
+    );
+  }
+  if (!currentUser.isAdmin) {
+    return NextResponse.json(
+      {
+        error:
+          "Truy cập bị từ chối: Chỉ tài khoản Admin mới được phép tạo user cho thành viên gia đình!",
+      },
+      { status: 403 }
+    );
+  }
+
   const body = await req.json();
   const username = String(body.username || "")
     .trim()
@@ -48,12 +76,12 @@ export async function POST(req: NextRequest) {
     .replace(/\s+/g, "");
   const fullName = String(body.fullName || "").trim();
   const roleLabel = String(body.roleLabel || "Thành viên").trim();
-  const password = String(body.password || "123456");
+  const password = String(body.password || "").trim();
   const avatarColor = String(body.avatarColor || "#2563EB");
 
-  if (!username || !fullName) {
+  if (!username || !fullName || !password) {
     return NextResponse.json(
-      { error: "Vui lòng nhập Tên đăng nhập và Tên hiển thị!" },
+      { error: "Vui lòng nhập đầy đủ Tên đăng nhập, Tên hiển thị và Mật khẩu!" },
       { status: 400 }
     );
   }
@@ -68,20 +96,39 @@ export async function POST(req: NextRequest) {
       .where(eq(users.username, username));
     if (existing.length > 0) {
       return NextResponse.json(
-        { error: "Tên đăng nhập đã tồn tại!" },
+        { error: "Tên đăng nhập đã tồn tại trong gia đình!" },
         { status: 400 }
       );
     }
     const inserted = await db
       .insert(users)
-      .values({ username, fullName, roleLabel, passwordHash, avatarColor })
+      .values({
+        username,
+        fullName,
+        roleLabel,
+        isAdmin: false,
+        passwordHash,
+        avatarColor,
+      })
       .returning();
-    return NextResponse.json({ ok: true, member: inserted[0] });
+    const u = inserted[0];
+    return NextResponse.json({
+      ok: true,
+      member: {
+        id: u.id,
+        username: u.username,
+        fullName: u.fullName,
+        roleLabel: u.roleLabel,
+        isAdmin: Boolean(u.isAdmin),
+        avatarColor: u.avatarColor,
+        createdAt: u.createdAt,
+      },
+    });
   } else {
     const store = readLocalStore();
-    if (store.users.some((u) => u.username === username)) {
+    if (store.users.some((u) => u.username.toLowerCase() === username)) {
       return NextResponse.json(
-        { error: "Tên đăng nhập đã tồn tại!" },
+        { error: "Tên đăng nhập đã tồn tại trong gia đình!" },
         { status: 400 }
       );
     }
@@ -91,27 +138,74 @@ export async function POST(req: NextRequest) {
       username,
       fullName,
       roleLabel,
+      isAdmin: false,
       passwordHash,
       avatarColor,
       createdAt: new Date().toISOString(),
     };
     store.users.push(member);
     writeLocalStore(store);
-    return NextResponse.json({ ok: true, member });
+    return NextResponse.json({
+      ok: true,
+      member: {
+        id: member.id,
+        username: member.username,
+        fullName: member.fullName,
+        roleLabel: member.roleLabel,
+        isAdmin: member.isAdmin,
+        avatarColor: member.avatarColor,
+        createdAt: member.createdAt,
+      },
+    });
   }
 }
 
 export async function DELETE(req: NextRequest) {
   await ensureNeonSchema();
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    return NextResponse.json(
+      { error: "Vui lòng đăng nhập trước khi thực hiện!" },
+      { status: 401 }
+    );
+  }
+  if (!currentUser.isAdmin) {
+    return NextResponse.json(
+      { error: "Chỉ tài khoản Admin mới có quyền xóa thành viên!" },
+      { status: 403 }
+    );
+  }
+
   const id = Number(req.nextUrl.searchParams.get("id"));
   if (!id) {
     return NextResponse.json({ error: "Thiếu ID thành viên" }, { status: 400 });
   }
+  if (id === currentUser.id) {
+    return NextResponse.json(
+      { error: "Không thể tự xóa tài khoản Admin đang đăng nhập!" },
+      { status: 400 }
+    );
+  }
+
   const db = getDrizzleDb();
   if (db && isNeonConfigured()) {
+    const target = await db.select().from(users).where(eq(users.id, id));
+    if (target[0]?.isAdmin || target[0]?.username === "bominh") {
+      return NextResponse.json(
+        { error: "Không thể xóa tài khoản Quản trị viên (Admin)!" },
+        { status: 400 }
+      );
+    }
     await db.delete(users).where(eq(users.id, id));
   } else {
     const store = readLocalStore();
+    const target = store.users.find((u) => u.id === id);
+    if (target?.isAdmin || target?.username === "bominh") {
+      return NextResponse.json(
+        { error: "Không thể xóa tài khoản Quản trị viên (Admin)!" },
+        { status: 400 }
+      );
+    }
     store.users = store.users.filter((u) => u.id !== id);
     writeLocalStore(store);
   }

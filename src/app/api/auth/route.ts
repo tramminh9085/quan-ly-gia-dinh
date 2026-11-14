@@ -20,11 +20,20 @@ export async function GET() {
   const currentUser = await getCurrentUser();
   const db = getDrizzleDb();
 
+  if (!currentUser) {
+    return NextResponse.json({
+      user: null,
+      members: [],
+      dbMode: isNeonConfigured() ? "neon" : "local",
+    });
+  }
+
   let allMembers: Array<{
     id: number;
     username: string;
     fullName: string;
     roleLabel: string;
+    isAdmin: boolean;
     avatarColor: string;
   }> = [];
 
@@ -35,6 +44,7 @@ export async function GET() {
       username: u.username,
       fullName: u.fullName,
       roleLabel: u.roleLabel,
+      isAdmin: Boolean(u.isAdmin) || u.username === "bominh",
       avatarColor: u.avatarColor,
     }));
   } else {
@@ -44,6 +54,7 @@ export async function GET() {
       username: u.username,
       fullName: u.fullName,
       roleLabel: u.roleLabel,
+      isAdmin: Boolean(u.isAdmin) || u.username === "bominh",
       avatarColor: u.avatarColor,
     }));
   }
@@ -76,6 +87,7 @@ export async function POST(req: NextRequest) {
       username: string;
       fullName: string;
       roleLabel: string;
+      isAdmin?: boolean;
       passwordHash: string;
       avatarColor: string;
     } | null = null;
@@ -94,7 +106,10 @@ export async function POST(req: NextRequest) {
 
     if (!foundUser) {
       return NextResponse.json(
-        { error: "Không tìm thấy tên đăng nhập này trong gia đình!" },
+        {
+          error:
+            "Tài khoản không tồn tại! Vui lòng liên hệ Admin gia đình để được cấp tài khoản.",
+        },
         { status: 401 }
       );
     }
@@ -112,6 +127,7 @@ export async function POST(req: NextRequest) {
       username: foundUser.username,
       fullName: foundUser.fullName,
       roleLabel: foundUser.roleLabel,
+      isAdmin: Boolean(foundUser.isAdmin) || foundUser.username === "bominh",
       avatarColor: foundUser.avatarColor,
     };
 
@@ -127,94 +143,13 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === "register") {
-    const username = String(body.username || "")
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, "");
-    const fullName = String(body.fullName || "").trim();
-    const roleLabel = String(body.roleLabel || "Thành viên").trim();
-    const password = String(body.password || "");
-    const avatarColor = String(body.avatarColor || "#2563EB");
-
-    if (!username || !fullName || !password) {
-      return NextResponse.json(
-        { error: "Vui lòng nhập đầy đủ Tên đăng nhập, Tên hiển thị và Mật khẩu!" },
-        { status: 400 }
-      );
-    }
-
-    const passwordHash = bcrypt.hashSync(password, 8);
-    let createdUser: {
-      id: number;
-      username: string;
-      fullName: string;
-      roleLabel: string;
-      avatarColor: string;
-    };
-
-    if (db && isNeonConfigured()) {
-      const existing = await db
-        .select()
-        .from(users)
-        .where(eq(users.username, username));
-      if (existing.length > 0) {
-        return NextResponse.json(
-          { error: "Tên đăng nhập này đã tồn tại trong gia đình!" },
-          { status: 400 }
-        );
-      }
-      const inserted = await db
-        .insert(users)
-        .values({
-          username,
-          fullName,
-          roleLabel,
-          passwordHash,
-          avatarColor,
-        })
-        .returning();
-      createdUser = inserted[0];
-    } else {
-      const store = readLocalStore();
-      if (store.users.some((u) => u.username.toLowerCase() === username)) {
-        return NextResponse.json(
-          { error: "Tên đăng nhập này đã tồn tại trong gia đình!" },
-          { status: 400 }
-        );
-      }
-      const nextId =
-        store.users.reduce((max, u) => Math.max(max, u.id), 0) + 1;
-      const newUser = {
-        id: nextId,
-        username,
-        fullName,
-        roleLabel,
-        passwordHash,
-        avatarColor,
-        createdAt: new Date().toISOString(),
-      };
-      store.users.push(newUser);
-      writeLocalStore(store);
-      createdUser = newUser;
-    }
-
-    const sessionUser = {
-      id: createdUser.id,
-      username: createdUser.username,
-      fullName: createdUser.fullName,
-      roleLabel: createdUser.roleLabel,
-      avatarColor: createdUser.avatarColor,
-    };
-
-    const token = await createSessionToken(sessionUser);
-    const res = NextResponse.json({ ok: true, user: sessionUser });
-    res.cookies.set(SESSION_COOKIE_NAME, token, {
-      httpOnly: true,
-      path: "/",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 30,
-    });
-    return res;
+    return NextResponse.json(
+      {
+        error:
+          "Tính năng tự đăng ký đã bị khóa để đảm bảo bảo mật. Chỉ tài khoản Quản trị viên (Admin) mới được phép tạo tài khoản cho thành viên gia đình!",
+      },
+      { status: 403 }
+    );
   }
 
   return NextResponse.json({ error: "Hành động không hợp lệ" }, { status: 400 });

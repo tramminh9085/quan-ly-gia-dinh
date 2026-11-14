@@ -13,6 +13,10 @@ import { getCurrentUser } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
   await ensureNeonSchema();
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Vui lòng đăng nhập!" }, { status: 401 });
+  }
   const defaults = getCurrentPeriodKeys();
   const weeklyKey = req.nextUrl.searchParams.get("weeklyKey") || defaults.weekly;
   const monthlyKey =
@@ -113,6 +117,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   await ensureNeonSchema();
   const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Vui lòng đăng nhập!" }, { status: 401 });
+  }
   const body = await req.json();
 
   const title = String(body.title || "").trim();
@@ -172,6 +179,10 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   await ensureNeonSchema();
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Vui lòng đăng nhập!" }, { status: 401 });
+  }
   const id = Number(req.nextUrl.searchParams.get("id"));
   if (!id) {
     return NextResponse.json({ error: "Thiếu ID khoản đóng" }, { status: 400 });

@@ -41,6 +41,7 @@ interface Member {
   username: string;
   fullName: string;
   roleLabel: string;
+  isAdmin?: boolean;
   avatarColor: string;
 }
 
@@ -328,9 +329,11 @@ export default function FamilyHubPage() {
   // Form states - Member
   const [memUsername, setMemUsername] = useState("");
   const [memFullName, setMemFullName] = useState("");
-  const [memRole, setMemRole] = useState("Con");
+  const [memRole, setMemRole] = useState("Mẹ");
   const [memPassword, setMemPassword] = useState("123456");
-  const [memColor, setMemColor] = useState("#10B981");
+  const [memColor, setMemColor] = useState("#E11D48");
+  const [memberError, setMemberError] = useState("");
+  const [memberSuccess, setMemberSuccess] = useState("");
 
   // Thông tin ngày Âm - Dương hôm nay
   const todayInfo = useMemo(() => {
@@ -356,33 +359,27 @@ export default function FamilyHubPage() {
 
   async function loadAllData() {
     try {
-      const [
-        authRes,
-        expRes,
-        incRes,
-        accRes,
-        docRes,
-        evRes,
-        schRes,
-      ] = await Promise.all([
-        fetch("/api/auth").then((r) => r.json()),
-        fetch(
-          `/api/expenses?weeklyKey=${weeklyKey}&monthlyKey=${monthlyKey}&yearlyKey=${yearlyKey}`
-        ).then((r) => r.json()),
-        fetch("/api/incomes").then((r) => r.json()),
-        fetch("/api/accounts").then((r) => r.json()),
-        fetch("/api/documents").then((r) => r.json()),
-        fetch("/api/events").then((r) => r.json()),
-        fetch("/api/schedules").then((r) => r.json()),
-      ]);
-
-      if (authRes.members) setMembers(authRes.members);
-      if (authRes.user) {
-        setCurrentUser(authRes.user);
-      } else if (authRes.members?.length > 0) {
-        setCurrentUser(authRes.members[0]);
+      const authRes = await fetch("/api/auth").then((r) => r.json());
+      if (!authRes.user) {
+        router.replace("/login");
+        return;
       }
+
+      setCurrentUser(authRes.user);
+      if (authRes.members) setMembers(authRes.members);
       if (authRes.dbMode) setDbMode(authRes.dbMode);
+
+      const [expRes, incRes, accRes, docRes, evRes, schRes] =
+        await Promise.all([
+          fetch(
+            `/api/expenses?weeklyKey=${weeklyKey}&monthlyKey=${monthlyKey}&yearlyKey=${yearlyKey}`
+          ).then((r) => r.json()),
+          fetch("/api/incomes").then((r) => r.json()),
+          fetch("/api/accounts").then((r) => r.json()),
+          fetch("/api/documents").then((r) => r.json()),
+          fetch("/api/events").then((r) => r.json()),
+          fetch("/api/schedules").then((r) => r.json()),
+        ]);
 
       if (expRes.expenses) setExpenses(expRes.expenses);
       if (incRes.incomes) setIncomes(incRes.incomes);
@@ -630,9 +627,11 @@ export default function FamilyHubPage() {
     }
   }
 
-  // Thêm thành viên mới
+  // Thêm thành viên mới (Chỉ dành cho Admin)
   async function handleCreateMember(e: React.FormEvent) {
     e.preventDefault();
+    setMemberError("");
+    setMemberSuccess("");
     const res = await fetch("/api/members", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -644,12 +643,19 @@ export default function FamilyHubPage() {
         avatarColor: memColor,
       }),
     });
-    if (res.ok) {
-      setMemUsername("");
-      setMemFullName("");
-      setShowMemberForm(false);
-      await loadAllData();
+    const data = await res.json();
+    if (!res.ok) {
+      setMemberError(data.error || "Không thể tạo thành viên!");
+      return;
     }
+    setMemUsername("");
+    setMemFullName("");
+    setMemPassword("123456");
+    setShowMemberForm(false);
+    setMemberSuccess(
+      `Đã tạo tài khoản thành công cho ${data.member?.fullName || "thành viên mới"} (@${data.member?.username})!`
+    );
+    await loadAllData();
   }
 
   async function handleDeleteItem(endpoint: string, id: number) {
@@ -718,6 +724,16 @@ export default function FamilyHubPage() {
     });
   }, [documents, docHolderFilter, vaultSearch]);
 
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-[#f4f6fb]">
+        <div className="card-3d bg-amber-300 px-6 py-4 font-black text-slate-950 text-base">
+          🔒 Đang kiểm tra phiên đăng nhập bảo mật...
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen pb-28 md:pb-12">
       {/* TOP BAR NỔI KHỐI */}
@@ -754,24 +770,21 @@ export default function FamilyHubPage() {
                 <span className="font-black text-slate-950">
                   {currentUser.fullName}
                 </span>
+                {currentUser.isAdmin && (
+                  <span className="px-2 py-0.5 rounded-full bg-slate-950 text-amber-300 text-[10px] font-black uppercase">
+                    👑 ADMIN
+                  </span>
+                )}
               </div>
             )}
             <button
               type="button"
-              onClick={() => router.push("/login")}
-              className="btn-3d bg-white hover:bg-slate-100 text-slate-950 px-3 py-1.5 text-xs md:text-sm"
-              title="Đổi thành viên / Đăng nhập"
-            >
-              <LogIn className="w-4 h-4" />
-              <span className="hidden sm:inline">Đổi TV</span>
-            </button>
-            <button
-              type="button"
               onClick={handleLogout}
               className="btn-3d bg-rose-500 hover:bg-rose-400 text-white px-3 py-1.5 text-xs md:text-sm"
-              title="Đăng xuất"
+              title="Đăng xuất tài khoản"
             >
               <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">Đăng xuất</span>
             </button>
           </div>
         </div>
@@ -2762,27 +2775,61 @@ export default function FamilyHubPage() {
                     DANH SÁCH THÀNH VIÊN TRONG GIA ĐÌNH
                   </h2>
                   <p className="text-xs md:text-sm font-bold text-slate-700">
-                    Tạo mới hoặc chọn chuyển nhanh tài khoản thành viên
+                    {currentUser?.isAdmin
+                      ? "Bạn đang đăng nhập với quyền Quản trị viên (Admin) — có thể tạo và quản lý tài khoản cho các thành viên gia đình."
+                      : "Danh sách thành viên gia đình. Chỉ Quản trị viên (Admin: Bố Minh) mới có quyền tạo hoặc xóa tài khoản."}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setShowMemberForm(!showMemberForm)}
-                  className="btn-3d bg-amber-400 hover:bg-amber-300 text-slate-950 px-4 py-2.5 text-sm"
-                >
-                  <Plus className="w-5 h-5" />
-                  Tạo Thành Viên Mới
-                </button>
+                {currentUser?.isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMemberForm(!showMemberForm);
+                      setMemberError("");
+                      setMemberSuccess("");
+                    }}
+                    className="btn-3d bg-amber-400 hover:bg-amber-300 text-slate-950 px-4 py-2.5 text-sm"
+                  >
+                    <Plus className="w-5 h-5" />
+                    Tạo Thành Viên Mới (Admin)
+                  </button>
+                )}
               </div>
 
-              {showMemberForm && (
+              {!currentUser?.isAdmin && (
+                <div className="card-3d-sm bg-amber-50 p-3.5 mb-5 text-xs font-extrabold text-slate-900">
+                  🔒 Để đảm bảo bảo mật gia đình, tính năng tự tạo tài khoản đã được khóa. Chỉ tài khoản Quản trị viên (<span className="underline">Bố Minh - @bominh</span>) mới có quyền cấp tài khoản mới.
+                </div>
+              )}
+
+              {memberError && (
+                <div className="card-3d-sm bg-rose-100 border-rose-900 p-3.5 mb-5 text-rose-950 font-extrabold text-sm">
+                  ⚠️ {memberError}
+                </div>
+              )}
+
+              {memberSuccess && (
+                <div className="card-3d-sm bg-emerald-100 border-emerald-900 p-3.5 mb-5 text-emerald-950 font-extrabold text-sm">
+                  ✅ {memberSuccess}
+                </div>
+              )}
+
+              {currentUser?.isAdmin && showMemberForm && (
                 <form
                   onSubmit={handleCreateMember}
                   className="card-3d-sm bg-amber-50 p-4 md:p-5 mb-6 space-y-4"
                 >
-                  <h3 className="font-black text-base text-slate-950">
-                    ➕ THÊM THÀNH VIÊN GIA ĐÌNH MỚI
-                  </h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-black text-base text-slate-950">
+                      ➕ CẤP TÀI KHOẢN MỚI CHO THÀNH VIÊN GIA ĐÌNH (QUYỀN ADMIN)
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setShowMemberForm(false)}
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
                       <label className="block text-xs font-black mb-1">
@@ -2791,7 +2838,7 @@ export default function FamilyHubPage() {
                       <input
                         type="text"
                         required
-                        placeholder="VD: Ông Nội, Bà Ngoại, Bé út..."
+                        placeholder="VD: Mẹ Lan, Bé Minh Khôi, Ông Nội..."
                         value={memFullName}
                         onChange={(e) => setMemFullName(e.target.value)}
                         className="input-3d"
@@ -2799,12 +2846,12 @@ export default function FamilyHubPage() {
                     </div>
                     <div>
                       <label className="block text-xs font-black mb-1">
-                        TÊN ĐĂNG NHẬP *
+                        TÊN ĐĂNG NHẬP (VIẾT LIỀN) *
                       </label>
                       <input
                         type="text"
                         required
-                        placeholder="VD: ongnoi, bangoai..."
+                        placeholder="VD: melan, minhkhoi, baoan..."
                         value={memUsername}
                         onChange={(e) => setMemUsername(e.target.value)}
                         className="input-3d"
@@ -2812,11 +2859,11 @@ export default function FamilyHubPage() {
                     </div>
                     <div>
                       <label className="block text-xs font-black mb-1">
-                        VAI TRÒ
+                        VAI TRÒ TRONG NHÀ
                       </label>
                       <input
                         type="text"
-                        placeholder="VD: Ông Nội, Mẹ, Con..."
+                        placeholder="VD: Mẹ, Con trai, Ông Nội..."
                         value={memRole}
                         onChange={(e) => setMemRole(e.target.value)}
                         className="input-3d"
@@ -2824,63 +2871,109 @@ export default function FamilyHubPage() {
                     </div>
                     <div>
                       <label className="block text-xs font-black mb-1">
-                        MẬT KHẨU ĐĂNG NHẬP
+                        MẬT KHẨU KHỞI TẠO *
                       </label>
                       <input
                         type="text"
+                        required
                         value={memPassword}
                         onChange={(e) => setMemPassword(e.target.value)}
                         className="input-3d"
                       />
                     </div>
                   </div>
-                  <div className="flex justify-end">
+                  <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black text-slate-950">
+                        MÀU ĐẠI DIỆN:
+                      </span>
+                      {[
+                        "#2563EB",
+                        "#E11D48",
+                        "#10B981",
+                        "#F59E0B",
+                        "#7C3AED",
+                        "#0D9488",
+                      ].map((color) => (
+                        <button
+                          key={color}
+                          type="button"
+                          onClick={() => setMemColor(color)}
+                          className={`w-7 h-7 rounded-full border-2 border-slate-950 transition-transform ${
+                            memColor === color
+                              ? "scale-125 ring-2 ring-offset-1 ring-slate-950"
+                              : "opacity-75"
+                          }`}
+                          style={{ backgroundColor: color }}
+                        />
+                      ))}
+                    </div>
                     <button
                       type="submit"
                       className="btn-3d bg-blue-600 text-white px-6 py-2.5 text-sm"
                     >
-                      Tạo Thành Viên
+                      Tạo Tài Khoản Thành Viên
                     </button>
                   </div>
                 </form>
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                {members.map((m) => (
-                  <div
-                    key={m.id}
-                    className="card-3d-sm p-4 bg-white flex flex-col items-center text-center gap-2"
-                  >
+                {members.map((m) => {
+                  const isMemberAdmin =
+                    Boolean(m.isAdmin) || m.username === "bominh";
+                  return (
                     <div
-                      className="w-16 h-16 rounded-full flex items-center justify-center text-white font-black text-2xl border-2 border-slate-950 shadow-[0_3px_0_#0f172a]"
-                      style={{ backgroundColor: m.avatarColor }}
+                      key={m.id}
+                      className="card-3d-sm p-4 bg-white flex flex-col items-center text-center justify-between gap-2"
                     >
-                      {m.fullName.charAt(0).toUpperCase()}
+                      <div className="flex flex-col items-center gap-2 w-full">
+                        <div
+                          className="w-16 h-16 rounded-full flex items-center justify-center text-white font-black text-2xl border-2 border-slate-950 shadow-[0_3px_0_#0f172a]"
+                          style={{ backgroundColor: m.avatarColor }}
+                        >
+                          {m.fullName.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="font-black text-lg text-slate-950">
+                          {m.fullName}
+                        </div>
+                        <div className="flex flex-wrap items-center justify-center gap-1.5">
+                          <span className="badge-3d bg-slate-100 px-3 py-0.5 text-xs">
+                            {m.roleLabel}
+                          </span>
+                          {isMemberAdmin && (
+                            <span className="badge-3d bg-amber-300 text-slate-950 px-2.5 py-0.5 text-xs">
+                              👑 ADMIN
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs font-bold text-slate-600">
+                          ID đăng nhập: @{m.username}
+                        </div>
+                      </div>
+
+                      <div className="w-full pt-2 mt-1 border-t border-dashed border-slate-200 flex flex-col gap-2">
+                        {currentUser?.id === m.id ? (
+                          <div className="badge-3d w-full py-2 text-xs bg-emerald-400 text-slate-950 text-center">
+                            ✓ Đang đăng nhập
+                          </div>
+                        ) : (
+                          currentUser?.isAdmin &&
+                          !isMemberAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteItem("members", m.id)}
+                              className="btn-3d w-full py-2 text-xs bg-rose-100 hover:bg-rose-200 text-rose-900"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Xóa tài khoản này
+                            </button>
+                          )
+                        )}
+                      </div>
                     </div>
-                    <div className="font-black text-lg text-slate-950">
-                      {m.fullName}
-                    </div>
-                    <span className="badge-3d bg-slate-100 px-3 py-0.5 text-xs">
-                      {m.roleLabel}
-                    </span>
-                    <div className="text-xs font-bold text-slate-600">
-                      ID đăng nhập: @{m.username}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setCurrentUser(m)}
-                      className={`btn-3d w-full py-2 text-xs mt-2 ${
-                        currentUser?.id === m.id
-                          ? "bg-emerald-400 text-slate-950"
-                          : "bg-slate-100 text-slate-900"
-                      }`}
-                    >
-                      {currentUser?.id === m.id
-                        ? "✓ Đang sử dụng"
-                        : "Chuyển sang TV này"}
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 

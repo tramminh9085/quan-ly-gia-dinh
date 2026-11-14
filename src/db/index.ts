@@ -35,6 +35,7 @@ export interface UserRecord {
   username: string;
   fullName: string;
   roleLabel: string;
+  isAdmin: boolean;
   passwordHash: string;
   avatarColor: string;
   createdAt: string;
@@ -168,36 +169,10 @@ function createInitialSeedData(): FamilyDatabaseStore {
         id: 1,
         username: "bominh",
         fullName: "Bố Minh",
-        roleLabel: "Bố",
+        roleLabel: "Bố (Admin)",
+        isAdmin: true,
         passwordHash: defaultPasswordHash,
         avatarColor: "#2563EB",
-        createdAt: nowIso,
-      },
-      {
-        id: 2,
-        username: "melan",
-        fullName: "Mẹ Lan",
-        roleLabel: "Mẹ",
-        passwordHash: defaultPasswordHash,
-        avatarColor: "#E11D48",
-        createdAt: nowIso,
-      },
-      {
-        id: 3,
-        username: "minhkhoi",
-        fullName: "Bé Minh Khôi",
-        roleLabel: "Con trai (Lớp 5)",
-        passwordHash: defaultPasswordHash,
-        avatarColor: "#10B981",
-        createdAt: nowIso,
-      },
-      {
-        id: 4,
-        username: "baoan",
-        fullName: "Bé Bảo An",
-        roleLabel: "Con gái (Lớp 2)",
-        passwordHash: defaultPasswordHash,
-        avatarColor: "#F59E0B",
         createdAt: nowIso,
       },
     ],
@@ -212,7 +187,7 @@ function createInitialSeedData(): FamilyDatabaseStore {
         category: "Sinh hoạt",
         note: "Đi siêu thị cuối tuần / đầu tuần",
         isActive: true,
-        createdBy: 2,
+        createdBy: 1,
         createdAt: nowIso,
       },
       {
@@ -225,7 +200,7 @@ function createInitialSeedData(): FamilyDatabaseStore {
         category: "Học tập",
         note: "Đóng cho cô chủ nhiệm lớp 5A và 2B trước ngày 05 hàng tháng",
         isActive: true,
-        createdBy: 2,
+        createdBy: 1,
         createdAt: nowIso,
       },
       {
@@ -251,7 +226,7 @@ function createInitialSeedData(): FamilyDatabaseStore {
         category: "Học tập",
         note: "Lớp Tiếng Anh của Minh Khôi và Bảo An",
         isActive: true,
-        createdBy: 2,
+        createdBy: 1,
         createdAt: nowIso,
       },
       {
@@ -287,9 +262,9 @@ function createInitialSeedData(): FamilyDatabaseStore {
         expenseId: 2,
         periodKey: monthPeriod,
         paidAmount: 2400000,
-        paidBy: 2,
+        paidBy: 1,
         paidAt: nowIso,
-        note: "Mẹ Lan đã chuyển khoản cho cô chủ nhiệm",
+        note: "Đã chuyển khoản cho cô chủ nhiệm",
       },
       {
         id: 2,
@@ -314,11 +289,11 @@ function createInitialSeedData(): FamilyDatabaseStore {
       },
       {
         id: 2,
-        title: "Lương tháng của Mẹ Lan",
+        title: "Thu nhập tháng bổ sung gia đình",
         amount: 18000000,
         cycle: "monthly",
         periodKey: monthPeriod,
-        receivedBy: 2,
+        receivedBy: 1,
         note: "Thu nhập chính + phụ cấp",
         createdAt: nowIso,
       },
@@ -341,7 +316,7 @@ function createInitialSeedData(): FamilyDatabaseStore {
         platformUrl: "https://violympic.vn",
         accountUsername: "minhkhoi_5a_2026",
         accountPassword: "Khoi@2026#",
-        memberId: 3,
+        memberId: null,
         ownerName: "Bé Minh Khôi",
         note: "ID học sinh: 8829102 - Trường Tiểu học Nguyễn Du",
         createdAt: nowIso,
@@ -353,7 +328,7 @@ function createInitialSeedData(): FamilyDatabaseStore {
         platformUrl: "https://ioe.vn",
         accountUsername: "khoinm_ioe5a",
         accountPassword: "IoePass@123",
-        memberId: 3,
+        memberId: null,
         ownerName: "Bé Minh Khôi",
         note: "Đã qua vòng cấp Trường, thi tiếp vòng Quận",
         createdAt: nowIso,
@@ -365,7 +340,7 @@ function createInitialSeedData(): FamilyDatabaseStore {
         platformUrl: "https://trangnguyen.edu.vn",
         accountUsername: "baoan_lop2b",
         accountPassword: "BaoAn2019!",
-        memberId: 4,
+        memberId: null,
         ownerName: "Bé Bảo An",
         note: "SBD: TN992011 - Cô Hoa hướng dẫn",
         createdAt: nowIso,
@@ -377,9 +352,9 @@ function createInitialSeedData(): FamilyDatabaseStore {
         platformUrl: "https://enetviet.com",
         accountUsername: "0912345678",
         accountPassword: "GiaDinh@2026",
-        memberId: 2,
+        memberId: 1,
         ownerName: "Cả gia đình (2 bé)",
-        note: "Dùng SĐT của Mẹ Lan để nhận thông báo của cả 2 lớp",
+        note: "Nhận thông báo của cả 2 lớp",
         createdAt: nowIso,
       },
       {
@@ -401,7 +376,7 @@ function createInitialSeedData(): FamilyDatabaseStore {
         title: "Giấy khai sinh (Bản chính) - Bé Minh Khôi",
         docType: "birth_cert",
         docNumber: "148/2016 - Quyển số 01/2016",
-        memberId: 3,
+        memberId: null,
         holderName: "Bé Minh Khôi",
         issueDate: "15/05/2016",
         expiryDate: "Vĩnh viễn",
@@ -416,14 +391,14 @@ function createInitialSeedData(): FamilyDatabaseStore {
         title: "Thẻ Bảo hiểm Y tế Học sinh - Bé Minh Khôi",
         docType: "health_ins",
         docNumber: "HS4797938291022",
-        memberId: 3,
+        memberId: null,
         holderName: "Bé Minh Khôi",
         issueDate: "01/01/2026",
         expiryDate: "31/12/2026",
         issuePlace: "Bệnh viện Nhi Đồng 2 (Nơi ĐK KCB ban đầu)",
         frontImage: "",
         backImage: "",
-        note: "Tích hợp trên VssID của Mẹ Lan",
+        note: "Tích hợp trên VssID gia đình",
         createdAt: nowIso,
       },
       {
@@ -431,7 +406,7 @@ function createInitialSeedData(): FamilyDatabaseStore {
         title: "Giấy khai sinh & Mã định danh - Bé Bảo An",
         docType: "birth_cert",
         docNumber: "219/2019 - Quyển số 02/2019",
-        memberId: 4,
+        memberId: null,
         holderName: "Bé Bảo An",
         issueDate: "20/08/2019",
         expiryDate: "Vĩnh viễn",
@@ -483,7 +458,7 @@ function createInitialSeedData(): FamilyDatabaseStore {
         isRecurring: true,
         remindDaysBefore: 7,
         note: "Về quê ngoại sáng sớm, chuẩn bị lễ vật",
-        createdBy: 2,
+        createdBy: 1,
         createdAt: nowIso,
       },
       {
@@ -511,14 +486,14 @@ function createInitialSeedData(): FamilyDatabaseStore {
         isRecurring: true,
         remindDaysBefore: 7,
         note: "Đặt bánh kem dâu tây bé thích",
-        createdBy: 2,
+        createdBy: 1,
         createdAt: nowIso,
       },
     ],
     kidsSchedules: [
       {
         id: 1,
-        childId: 3,
+        childId: null,
         childName: "Bé Minh Khôi",
         subject: "Học chính khóa Lớp 5A (Bán trú)",
         scheduleType: "main",
@@ -529,14 +504,14 @@ function createInitialSeedData(): FamilyDatabaseStore {
         teacherInfo: "Cô Hạnh (CN): 0908.111.222",
         dropoffBy: 1,
         dropoffName: "Bố Minh",
-        pickupBy: 2,
+        pickupBy: null,
         pickupName: "Mẹ Lan",
         note: "Mặc đồng phục lễ chào cờ, mang áo khoác",
         createdAt: nowIso,
       },
       {
         id: 2,
-        childId: 3,
+        childId: null,
         childName: "Bé Minh Khôi",
         subject: "Học thêm Tiếng Anh ILA (Chứng chỉ Flyers)",
         scheduleType: "extra",
@@ -545,7 +520,7 @@ function createInitialSeedData(): FamilyDatabaseStore {
         endTime: "19:30",
         location: "Trung tâm ILA - Tầng 3, 146 Nguyễn Đình Chiểu",
         teacherInfo: "Ms. Thảo (Trợ giảng): 0933.444.555",
-        dropoffBy: 2,
+        dropoffBy: null,
         dropoffName: "Mẹ Lan",
         pickupBy: 1,
         pickupName: "Bố Minh",
@@ -554,7 +529,7 @@ function createInitialSeedData(): FamilyDatabaseStore {
       },
       {
         id: 3,
-        childId: 3,
+        childId: null,
         childName: "Bé Minh Khôi",
         subject: "CLB Toán Tư Duy & Luyện Violympic",
         scheduleType: "extra",
@@ -572,7 +547,7 @@ function createInitialSeedData(): FamilyDatabaseStore {
       },
       {
         id: 4,
-        childId: 4,
+        childId: null,
         childName: "Bé Bảo An",
         subject: "Học chính khóa Lớp 2B (Bán trú)",
         scheduleType: "main",
@@ -583,14 +558,14 @@ function createInitialSeedData(): FamilyDatabaseStore {
         teacherInfo: "Cô Hoa (CN): 0909.333.666",
         dropoffBy: 1,
         dropoffName: "Bố Minh",
-        pickupBy: 2,
+        pickupBy: null,
         pickupName: "Mẹ Lan",
         note: "Mang bình nước ấm",
         createdAt: nowIso,
       },
       {
         id: 5,
-        childId: 4,
+        childId: null,
         childName: "Bé Bảo An",
         subject: "Lớp Vẽ Sáng Tạo & Đàn Piano",
         scheduleType: "activity",
@@ -599,7 +574,7 @@ function createInitialSeedData(): FamilyDatabaseStore {
         endTime: "17:00",
         location: "Nhà Thiếu Nhi Thành Phố - Khu B",
         teacherInfo: "Cô Mai: 0977.222.333",
-        dropoffBy: 2,
+        dropoffBy: null,
         dropoffName: "Mẹ Lan",
         pickupBy: 1,
         pickupName: "Bố Minh",
@@ -608,7 +583,7 @@ function createInitialSeedData(): FamilyDatabaseStore {
       },
       {
         id: 6,
-        childId: 3,
+        childId: null,
         childName: "Bé Minh Khôi",
         subject: "Học Bơi & Thể thao cuối tuần",
         scheduleType: "activity",
@@ -654,10 +629,14 @@ export async function ensureNeonSchema() {
         username TEXT NOT NULL UNIQUE,
         full_name TEXT NOT NULL,
         role_label TEXT NOT NULL DEFAULT 'Thành viên',
+        is_admin BOOLEAN NOT NULL DEFAULT FALSE,
         password_hash TEXT NOT NULL,
         avatar_color TEXT NOT NULL DEFAULT '#2563EB',
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
       );
+    `;
+    await sql`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE;
     `;
     await sql`
       CREATE TABLE IF NOT EXISTS recurring_expenses (
@@ -774,8 +753,8 @@ export async function ensureNeonSchema() {
       const seed = createInitialSeedData();
       for (const u of seed.users) {
         await sql`
-          INSERT INTO users (username, full_name, role_label, password_hash, avatar_color)
-          VALUES (${u.username}, ${u.fullName}, ${u.roleLabel}, ${u.passwordHash}, ${u.avatarColor})
+          INSERT INTO users (username, full_name, role_label, is_admin, password_hash, avatar_color)
+          VALUES (${u.username}, ${u.fullName}, ${u.roleLabel}, ${u.isAdmin}, ${u.passwordHash}, ${u.avatarColor})
           ON CONFLICT (username) DO NOTHING
         `;
       }
@@ -815,6 +794,28 @@ export async function ensureNeonSchema() {
           VALUES (${ks.childId}, ${ks.childName}, ${ks.subject}, ${ks.scheduleType}, ${ks.dayOfWeek}, ${ks.startTime}, ${ks.endTime}, ${ks.location}, ${ks.teacherInfo}, ${ks.dropoffBy}, ${ks.dropoffName}, ${ks.pickupBy}, ${ks.pickupName}, ${ks.note})
         `;
       }
+    } else {
+      // Nếu DB đã có dữ liệu cũ chưa khởi tạo Admin, nâng cấp bominh thành Admin và xóa các user mẫu
+      const adminCheck = await sql`SELECT COUNT(*)::int AS count FROM users WHERE is_admin = TRUE`;
+      if (adminCheck[0]?.count === 0) {
+        await sql`
+          DELETE FROM users WHERE username IN ('melan', 'minhkhoi', 'baoan')
+        `;
+        const updated = await sql`
+          UPDATE users
+          SET is_admin = TRUE, role_label = 'Bố (Admin)'
+          WHERE username = 'bominh'
+          RETURNING id
+        `;
+        if (updated.length === 0) {
+          const defaultHash = bcrypt.hashSync("123456", 8);
+          await sql`
+            INSERT INTO users (username, full_name, role_label, is_admin, password_hash, avatar_color)
+            VALUES ('bominh', 'Bố Minh', 'Bố (Admin)', TRUE, ${defaultHash}, '#2563EB')
+            ON CONFLICT (username) DO UPDATE SET is_admin = TRUE, role_label = 'Bố (Admin)'
+          `;
+        }
+      }
     }
     neonInitialized = true;
   } catch (err) {
@@ -828,7 +829,26 @@ export function readLocalStore(): FamilyDatabaseStore {
   if (fs.existsSync(filePath)) {
     try {
       const raw = fs.readFileSync(filePath, "utf-8");
-      memoryStore = JSON.parse(raw) as FamilyDatabaseStore;
+      const parsed = JSON.parse(raw) as FamilyDatabaseStore;
+      // Nâng cấp store cũ nếu chưa có tài khoản Admin
+      if (!parsed.users.some((u) => u.isAdmin)) {
+        parsed.users = parsed.users
+          .filter((u) => !["melan", "minhkhoi", "baoan"].includes(u.username))
+          .map((u) =>
+            u.username === "bominh"
+              ? { ...u, isAdmin: true, roleLabel: "Bố (Admin)" }
+              : { ...u, isAdmin: Boolean(u.isAdmin) }
+          );
+        if (!parsed.users.some((u) => u.username === "bominh")) {
+          parsed.users.unshift(createInitialSeedData().users[0]);
+        }
+        try {
+          fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2), "utf-8");
+        } catch {
+          // Ignore write error on read-only fs
+        }
+      }
+      memoryStore = parsed;
       return memoryStore;
     } catch {
       // Fallback nếu file lỗi

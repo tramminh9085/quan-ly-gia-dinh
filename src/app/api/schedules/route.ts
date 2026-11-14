@@ -8,9 +8,14 @@ import {
 } from "@/db";
 import { kidsSchedules } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { getCurrentUser } from "@/lib/auth";
 
 export async function GET() {
   await ensureNeonSchema();
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Vui lòng đăng nhập!" }, { status: 401 });
+  }
   const db = getDrizzleDb();
 
   if (db && isNeonConfigured()) {
@@ -32,6 +37,10 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   await ensureNeonSchema();
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Vui lòng đăng nhập!" }, { status: 401 });
+  }
   const body = await req.json();
 
   const childId = body.childId ? Number(body.childId) : null;
@@ -111,6 +120,10 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   await ensureNeonSchema();
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Vui lòng đăng nhập!" }, { status: 401 });
+  }
   const id = Number(req.nextUrl.searchParams.get("id"));
   if (!id) {
     return NextResponse.json({ error: "Thiếu ID lịch học" }, { status: 400 });

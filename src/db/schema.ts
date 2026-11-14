@@ -15,6 +15,7 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   fullName: text("full_name").notNull(),
   roleLabel: text("role_label").notNull().default("Thành viên"), // Bố, Mẹ, Con, Ông, Bà
+  isAdmin: boolean("is_admin").notNull().default(false),
   passwordHash: text("password_hash").notNull(),
   avatarColor: text("avatar_color").notNull().default("#2563EB"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

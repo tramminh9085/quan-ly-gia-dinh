@@ -13,6 +13,9 @@ import { getCurrentUser } from "@/lib/auth";
 export async function POST(req: NextRequest) {
   await ensureNeonSchema();
   const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Vui lòng đăng nhập!" }, { status: 401 });
+  }
   const body = await req.json();
 
   const expenseId = Number(body.expenseId);
@@ -80,6 +83,10 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   await ensureNeonSchema();
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Vui lòng đăng nhập!" }, { status: 401 });
+  }
   const expenseId = Number(req.nextUrl.searchParams.get("expenseId"));
   const periodKey = String(req.nextUrl.searchParams.get("periodKey") || "");
 
