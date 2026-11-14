@@ -1,0 +1,36 @@
+{
+  "name": "quan-ly-gia-dinh",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hệ thống Quản lý Gia đình Toàn diện (Tổ Ấm Số) - Thu Chi, Lịch Học & Đưa Đón, Lịch Giỗ Âm/Dương, Tài Khoản & Giấy Tờ Cá Nhân",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "db:push": "drizzle-kit push",
+    "cap:sync": "cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/cli": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@neondatabase/serverless": "^0.10.4",
+    "bcryptjs": "^2.4.3",
+    "drizzle-orm": "^0.38.3",
+    "jose": "^5.9.6",
+    "lucide-react": "^0.475.0",
+    "next": "15.1.7",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.6",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "drizzle-kit": "^0.30.4",
+    "tailwindcss": "^4.0.6",
+    "typescript": "^5.7.3"
+  }
+}

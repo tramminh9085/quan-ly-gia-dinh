@@ -1,0 +1,103 @@
+import { NextRequest, NextResponse } from "next/server";
+import {
+  ensureNeonSchema,
+  getDrizzleDb,
+  isNeonConfigured,
+  readLocalStore,
+  writeLocalStore,
+} from "@/db";
+import { sharedAccounts } from "@/db/schema";
+import { eq } from "drizzle-orm";
+
+export async function GET() {
+  await ensureNeonSchema();
+  const db = getDrizzleDb();
+
+  if (db && isNeonConfigured()) {
+    const rows = await db.select().from(sharedAccounts);
+    return NextResponse.json({ accounts: rows });
+  } else {
+    const store = readLocalStore();
+    return NextResponse.json({ accounts: store.sharedAccounts });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  await ensureNeonSchema();
+  const body = await req.json();
+
+  const title = String(body.title || "").trim();
+  const category = (body.category || "class") as
+    | "class"
+    | "contest"
+    | "utility"
+    | "entertainment"
+    | "other";
+  const platformUrl = String(body.platformUrl || "").trim();
+  const accountUsername = String(body.accountUsername || "").trim();
+  const accountPassword = String(body.accountPassword || "").trim();
+  const memberId = body.memberId ? Number(body.memberId) : null;
+  const ownerName = String(body.ownerName || "Cả gia đình").trim();
+  const note = String(body.note || "").trim();
+
+  if (!title || !accountUsername || !accountPassword) {
+    return NextResponse.json(
+      { error: "Vui lòng nhập Tên tài khoản, Username và Password!" },
+      { status: 400 }
+    );
+  }
+
+  const db = getDrizzleDb();
+  if (db && isNeonConfigured()) {
+    const inserted = await db
+      .insert(sharedAccounts)
+      .values({
+        title,
+        category,
+        platformUrl,
+        accountUsername,
+        accountPassword,
+        memberId,
+        ownerName,
+        note,
+      })
+      .returning();
+    return NextResponse.json({ ok: true, account: inserted[0] });
+  } else {
+    const store = readLocalStore();
+    const nextId =
+      store.sharedAccounts.reduce((m, a) => Math.max(m, a.id), 0) + 1;
+    const item = {
+      id: nextId,
+      title,
+      category,
+      platformUrl,
+      accountUsername,
+      accountPassword,
+      memberId,
+      ownerName,
+      note,
+      createdAt: new Date().toISOString(),
+    };
+    store.sharedAccounts.unshift(item);
+    writeLocalStore(store);
+    return NextResponse.json({ ok: true, account: item });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  await ensureNeonSchema();
+  const id = Number(req.nextUrl.searchParams.get("id"));
+  if (!id) {
+    return NextResponse.json({ error: "Thiếu ID tài khoản" }, { status: 400 });
+  }
+  const db = getDrizzleDb();
+  if (db && isNeonConfigured()) {
+    await db.delete(sharedAccounts).where(eq(sharedAccounts.id, id));
+  } else {
+    const store = readLocalStore();
+    store.sharedAccounts = store.sharedAccounts.filter((a) => a.id !== id);
+    writeLocalStore(store);
+  }
+  return NextResponse.json({ ok: true });
+}

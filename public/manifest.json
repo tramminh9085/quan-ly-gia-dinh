@@ -1,0 +1,16 @@
+{
+  "name": "Quản Lý Gia Đình - Tổ Ấm Số",
+  "short_name": "Tổ Ấm Số",
+  "description": "Ứng dụng quản lý gia đình: Thu chi định kỳ, Lịch học & đưa đón con, Lịch giỗ Âm/Dương, Tài khoản & Giấy tờ cá nhân",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f6fb",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
