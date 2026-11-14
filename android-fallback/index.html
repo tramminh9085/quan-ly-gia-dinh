@@ -5,92 +5,107 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Quản Lý Gia Đình - Tổ Ấm Số (Android APK)</title>
   <style>
-    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+    * { box-sizing: border-box; font-family: 'Be Vietnam Pro', system-ui, -apple-system, sans-serif; }
     body {
       margin: 0; padding: 0;
-      background-color: #f4f6fb;
-      color: #090d16;
+      background: linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%);
+      color: #0F172A;
       padding-bottom: 85px;
+      min-height: 100vh;
     }
     .header {
-      background: #fcd34d;
-      border-bottom: 3px solid #0f172a;
-      box-shadow: 0 4px 0 #0f172a;
-      padding: 14px 16px;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid #E2E8F0;
+      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+      padding: 10px 14px;
       position: sticky; top: 0; z-index: 20;
       display: flex; align-items: center; justify-content: space-between;
+      transition: transform 0.28s ease, opacity 0.28s ease;
     }
-    .title { font-size: 19px; font-weight: 900; margin: 0; }
-    .subtitle { font-size: 12px; font-weight: 800; color: #1e293b; margin-top: 2px; }
+    .header.hidden {
+      transform: translateY(-100%);
+      opacity: 0;
+      pointer-events: none;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: linear-gradient(135deg, #2563EB, #4F46E5);
+      color: #fff; display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 16px;
+    }
+    .title { font-size: 16px; font-weight: 800; margin: 0; color: #0F172A; }
     .container { max-width: 680px; margin: 0 auto; padding: 14px; }
     .card-3d {
-      background: #fff;
-      border: 2.5px solid #0f172a;
-      border-radius: 16px;
-      box-shadow: 0 4px 0 #0f172a;
-      padding: 14px;
-      margin-bottom: 14px;
+      background: #FFFFFF;
+      border: 1.5px solid #CBD5E1;
+      border-radius: 18px;
+      box-shadow: 0 8px 20px -6px rgba(15, 23, 42, 0.07);
+      padding: 15px;
+      margin-bottom: 12px;
     }
     .btn-3d {
-      border: 2.5px solid #0f172a;
+      border: 1.5px solid #2563EB;
       border-radius: 12px;
-      box-shadow: 0 3.5px 0 #0f172a;
-      font-weight: 900;
-      padding: 10px 14px;
+      font-weight: 700;
+      padding: 9px 14px;
       cursor: pointer;
       display: inline-flex; align-items: center; justify-content: center; gap: 6px;
       font-size: 13px;
-      background: #fcd34d; color: #0f172a;
+      background: #2563EB; color: #FFFFFF;
+      transition: all 0.18s ease;
     }
-    .btn-3d:active { transform: translateY(2px); box-shadow: 0 1px 0 #0f172a; }
+    .btn-3d:active { transform: translateY(1px); }
     .input-3d {
       width: 100%; padding: 10px 12px;
-      border: 2.5px solid #0f172a; border-radius: 10px;
-      font-weight: 700; font-size: 14px; margin-bottom: 8px;
+      border: 1.5px solid #CBD5E1; border-radius: 12px;
+      font-weight: 600; font-size: 14px; margin-bottom: 8px;
     }
     .badge {
-      display: inline-block; padding: 3px 9px;
-      border: 2px solid #0f172a; border-radius: 99px;
-      font-size: 11px; font-weight: 900;
-      box-shadow: 0 2px 0 #0f172a;
+      display: inline-flex; align-items: center; padding: 3px 10px;
+      border: 1px solid #CBD5E1; border-radius: 99px;
+      font-size: 11px; font-weight: 700;
     }
     .bottom-nav {
       position: fixed; bottom: 0; left: 0; right: 0;
-      background: #fff; border-top: 3px solid #0f172a;
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(12px);
+      border-top: 1px solid #E2E8F0;
       display: grid; grid-template-columns: repeat(4, 1fr);
       gap: 4px; padding: 8px; z-index: 30;
     }
     .nav-btn {
-      border: 2px solid transparent; border-radius: 12px;
-      background: transparent; font-weight: 900; font-size: 11px;
+      border: none; border-radius: 12px;
+      background: transparent; font-weight: 700; font-size: 11px;
+      color: #475569;
       padding: 8px 4px; text-align: center; cursor: pointer;
     }
     .nav-btn.active {
-      background: #fcd34d; border-color: #0f172a;
-      box-shadow: 0 2px 0 #0f172a;
+      background: #EFF6FF; color: #2563EB;
     }
   </style>
 </head>
 <body>
-  <div class="header">
-    <div>
-      <h1 class="title">🏠 QUẢN LÝ GIA ĐÌNH</h1>
-      <div class="subtitle">Tổ Ấm Số • Phiên bản Android APK</div>
+  <div id="topbar" class="header">
+    <div class="brand">
+      <div class="brand-icon">GĐ</div>
+      <h1 class="title">Quản Lý Gia Đình</h1>
     </div>
-    <button class="btn-3d" onclick="toggleCloudModal()" style="background:#38bdf8;">🌐 Kết nối Vercel</button>
+    <button class="btn-3d" onclick="toggleCloudModal()">Đồng bộ Cloud</button>
   </div>
 
   <div class="container">
     <!-- Hộp kết nối máy chủ Vercel + Neon -->
-    <div id="cloudBox" class="card-3d" style="background:#e0f2fe; display:none;">
-      <div style="font-weight:900; font-size:14px; margin-bottom:6px;">🔗 ĐỒNG BỘ TRỰC TIẾP VỚI MÁY CHỦ VERCEL + NEON</div>
-      <div style="font-size:12px; font-weight:700; margin-bottom:8px;">
-        Nhập địa chỉ Web sau khi bạn deploy lên Vercel (VD: https://quan-ly-gia-dinh.vercel.app) để đồng bộ dữ liệu thời gian thực với cả nhà:
+    <div id="cloudBox" class="card-3d" style="background:#EFF6FF; border-color:#BFDBFE; display:none;">
+      <div style="font-weight:800; font-size:14px; margin-bottom:6px; color:#1E40AF;">ĐỒNG BỘ TRỰC TIẾP VỚI MÁY CHỦ VERCEL + NEON</div>
+      <div style="font-size:12px; font-weight:600; color:#334155; margin-bottom:8px;">
+        Nhập địa chỉ Web Vercel của gia đình (VD: https://quan-ly-gia-dinh.vercel.app) để đồng bộ dữ liệu thời gian thực:
       </div>
       <input id="vercelUrlInput" class="input-3d" type="url" placeholder="https://quan-ly-gia-dinh.vercel.app" />
       <div style="display:flex; gap:8px;">
-        <button class="btn-3d" style="background:#10b981; flex:1;" onclick="connectVercel()">Lưu & Kết Nối Ngay</button>
-        <button class="btn-3d" style="background:#fff;" onclick="toggleCloudModal()">Đóng</button>
+        <button class="btn-3d" style="background:#059669; border-color:#059669; flex:1;" onclick="connectVercel()">Lưu & Kết Nối Ngay</button>
+        <button class="btn-3d" style="background:#fff; color:#334155; border-color:#CBD5E1;" onclick="toggleCloudModal()">Đóng</button>
       </div>
     </div>
 
@@ -99,10 +114,10 @@
   </div>
 
   <div class="bottom-nav">
-    <button class="nav-btn active" id="nav-finance" onclick="switchTab('finance')">💰 Thu - Chi</button>
-    <button class="nav-btn" id="nav-schedule" onclick="switchTab('schedule')">🎒 Lịch Con</button>
-    <button class="nav-btn" id="nav-events" onclick="switchTab('events')">🕯️ Giỗ / Lễ</button>
-    <button class="nav-btn" id="nav-vault" onclick="switchTab('vault')">🔐 Lưu Trữ</button>
+    <button class="nav-btn active" id="nav-finance" onclick="switchTab('finance')">Thu - Chi</button>
+    <button class="nav-btn" id="nav-schedule" onclick="switchTab('schedule')">Lịch Con</button>
+    <button class="nav-btn" id="nav-events" onclick="switchTab('events')">Giỗ / Lễ</button>
+    <button class="nav-btn" id="nav-vault" onclick="switchTab('vault')">Lưu Trữ</button>
   </div>
 
   <script>
@@ -110,6 +125,20 @@
     if (savedVercel && savedVercel.startsWith('http')) {
       window.location.replace(savedVercel);
     }
+
+    let lastScrollY = 0;
+    window.addEventListener('scroll', function() {
+      const currentY = window.scrollY;
+      const topbar = document.getElementById('topbar');
+      if (currentY <= 20) {
+        topbar.classList.remove('hidden');
+      } else if (currentY > lastScrollY + 6 && currentY > 40) {
+        topbar.classList.add('hidden');
+      } else if (currentY < lastScrollY - 10) {
+        topbar.classList.remove('hidden');
+      }
+      lastScrollY = currentY;
+    }, { passive: true });
 
     function toggleCloudModal() {
       const el = document.getElementById('cloudBox');
@@ -129,16 +158,19 @@
 
     const state = JSON.parse(localStorage.getItem('FAMILY_APK_STATE') || 'null') || {
       expenses: [
-        { id: 1, title: 'Tiền chợ & Thực phẩm tuần', amount: 1500000, cycle: 'Tuần', due: 'Thứ 2', paid: false },
         { id: 2, title: 'Quỹ lớp & Bán trú 2 con', amount: 2400000, cycle: 'Tháng', due: 'Ngày 05', paid: true },
         { id: 3, title: 'Tiền điện EVN & Nước sạch', amount: 1850000, cycle: 'Tháng', due: 'Ngày 12', paid: false },
         { id: 4, title: 'Học phí Tiếng Anh ILA', amount: 3200000, cycle: 'Tháng', due: 'Ngày 15', paid: false },
         { id: 5, title: 'Bảo hiểm Y tế & Nhân thọ', amount: 18000000, cycle: 'Năm', due: '15/11', paid: false }
       ],
+      incomes: [
+        { id: 1, title: 'Lương tháng của Bố Minh', amount: 25000000, cycle: 'Tháng', period: '2026-11', received: true },
+        { id: 2, title: 'Thu nhập tháng bổ sung gia đình', amount: 18000000, cycle: 'Tháng', period: '2026-11', received: false }
+      ],
       schedules: [
-        { id: 1, child: 'Bé Minh Khôi', subject: 'Học chính khóa Lớp 5A', day: 'Thứ 2 - Thứ 6', time: '07:15 - 16:30', dropoff: 'Bố Minh', pickup: 'Mẹ Lan' },
-        { id: 2, child: 'Bé Minh Khôi', subject: 'Tiếng Anh ILA', day: 'Thứ 4', time: '18:00 - 19:30', dropoff: 'Mẹ Lan', pickup: 'Bố Minh' },
-        { id: 3, child: 'Bé Bảo An', subject: 'Lớp Vẽ & Đàn Piano', day: 'Thứ 7', time: '15:00 - 17:00', dropoff: 'Mẹ Lan', pickup: 'Bố Minh' }
+        { id: 1, child: 'Bé Minh Khôi', subject: 'Học chính khóa Lớp 5A', day: 'Thứ 2 - Thứ 6', time: '07:15 - 16:30', location: 'Trường TH Nguyễn Du - Phòng 302', dropoff: 'Bố Minh', pickup: 'Mẹ Lan' },
+        { id: 2, child: 'Bé Minh Khôi', subject: 'Tiếng Anh ILA', day: 'Thứ 4', time: '18:00 - 19:30', location: 'Trung tâm ILA - 146 Nguyễn Đình Chiểu', dropoff: 'Mẹ Lan', pickup: 'Bố Minh' },
+        { id: 3, child: 'Bé Bảo An', subject: 'Lớp Vẽ & Đàn Piano', day: 'Thứ 7', time: '15:00 - 17:00', location: 'Nhà Thiếu Nhi TP - Khu B', dropoff: 'Mẹ Lan', pickup: 'Bố Minh' }
       ],
       events: [
         { id: 1, title: 'Giỗ Ông Nội', date: '15/10 Âm lịch', note: 'Chuẩn bị hoa sen trắng & lễ vật' },
@@ -148,10 +180,16 @@
       accounts: [
         { id: 1, title: 'Violympic Toán (Bé Minh Khôi)', user: 'minhkhoi_5a_2026', pass: 'Khoi@2026#' },
         { id: 2, title: 'Tiếng Anh IOE (Bé Minh Khôi)', user: 'khoinm_ioe5a', pass: 'IoePass@123' },
-        { id: 3, title: 'Trạng Nguyên Tiếng Việt (Bé Bảo An)', user: 'baoan_lop2b', pass: 'BaoAn2019!' },
-        { id: 4, title: 'Thẻ BHYT Bé Minh Khôi', user: 'HS4797938291022', pass: 'BV Nhi Đồng 2' }
+        { id: 3, title: 'Trạng Nguyên Tiếng Việt (Bé Bảo An)', user: 'baoan_lop2b', pass: 'BaoAn2019!' }
       ]
     };
+
+    if (!state.incomes) {
+      state.incomes = [
+        { id: 1, title: 'Lương tháng của Bố Minh', amount: 25000000, cycle: 'Tháng', period: '2026-11', received: true },
+        { id: 2, title: 'Thu nhập tháng bổ sung gia đình', amount: 18000000, cycle: 'Tháng', period: '2026-11', received: false }
+      ];
+    }
 
     function saveState() {
       localStorage.setItem('FAMILY_APK_STATE', JSON.stringify(state));
@@ -171,55 +209,78 @@
       if (item) { item.paid = !item.paid; saveState(); render(); }
     }
 
+    function toggleReceive(id) {
+      const item = state.incomes.find(i => i.id === id);
+      if (item) { item.received = !item.received; saveState(); render(); }
+    }
+
     function render() {
       const box = document.getElementById('tabContent');
       if (currentTab === 'finance') {
-        box.innerHTML = '<div class="card-3d" style="background:#34d399;"><div style="font-size:12px;font-weight:900;">KHOẢN ĐÓNG ĐỊNH KỲ (TUẦN / THÁNG / NĂM)</div><div style="font-size:20px;font-weight:900;margin-top:4px;">Chạm để đánh dấu Đã đóng</div></div>' +
+        box.innerHTML =
+          '<div class="card-3d" style="background:linear-gradient(135deg,#2563EB,#4F46E5);color:#fff;border:none;"><div style="font-size:11px;font-weight:700;opacity:0.9;">KHOẢN ĐÓNG ĐỊNH KỲ (THÁNG / NĂM)</div><div style="font-size:18px;font-weight:800;margin-top:4px;">Theo dõi đóng tiền & khoản thu theo kỳ</div></div>' +
           state.expenses.map(e => `
-            <div class="card-3d" style="background:${e.paid ? '#ecfdf5' : '#fff'}">
+            <div class="card-3d" style="background:${e.paid ? '#F0FDF4' : '#fff'};border-color:${e.paid ? '#BBF7D0' : '#CBD5E1'}">
               <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-                <span class="badge" style="background:#fde68a;">Định kỳ: ${e.cycle} (${e.due})</span>
-                <span class="badge" style="background:${e.paid ? '#34d399' : '#fb7185'};color:${e.paid ? '#000' : '#fff'}">${e.paid ? '✓ ĐÃ ĐÓNG' : 'CHƯA ĐÓNG'}</span>
+                <span class="badge" style="background:#EFF6FF;color:#1E40AF;border-color:#BFDBFE;">Định kỳ: ${e.cycle} (${e.due})</span>
+                <span class="badge" style="background:${e.paid ? '#DCFCE7' : '#FFE4E6'};color:${e.paid ? '#166534' : '#9F1239'};border-color:${e.paid ? '#86EFAC' : '#FECDD3'}">${e.paid ? 'Đã đóng' : 'Chưa đóng'}</span>
               </div>
-              <div style="font-size:16px;font-weight:900;">${e.title}</div>
-              <div style="font-size:19px;font-weight:900;color:#1d4ed8;margin:4px 0 10px;">${e.amount.toLocaleString('vi-VN')} đ</div>
-              <button class="btn-3d" style="width:100%;background:${e.paid ? '#e2e8f0' : '#34d399'}" onclick="togglePay(${e.id})">
-                ${e.paid ? 'Hoàn tác (Chưa đóng)' : '✓ Đánh dấu ĐÃ ĐÓNG'}
+              <div style="font-size:15px;font-weight:800;">${e.title}</div>
+              <div style="font-size:18px;font-weight:800;color:#2563EB;margin:4px 0 10px;">${e.amount.toLocaleString('vi-VN')} đ</div>
+              <button class="btn-3d" style="width:100%;background:${e.paid ? '#F1F5F9' : '#059669'};color:${e.paid ? '#334155' : '#fff'};border-color:${e.paid ? '#CBD5E1' : '#059669'}" onclick="togglePay(${e.id})">
+                ${e.paid ? 'Hoàn tác (Chưa đóng)' : 'Đánh dấu Đã đóng'}
+              </button>
+            </div>
+          `).join('') +
+          '<div class="card-3d" style="background:#ECFDF5;border-color:#A7F3D0;"><div style="font-size:14px;font-weight:800;color:#065F46;">CÁC KHOẢN THU GIA ĐÌNH THEO KỲ</div></div>' +
+          state.incomes.map(i => `
+            <div class="card-3d" style="background:${i.received ? '#F0FDF4' : '#fff'};border-color:${i.received ? '#BBF7D0' : '#CBD5E1'}">
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                <span class="badge" style="background:#ECFDF5;color:#065F46;border-color:#A7F3D0;">Kỳ: ${i.period} (${i.cycle})</span>
+                <span class="badge" style="background:${i.received ? '#DCFCE7' : '#FEF3C7'};color:${i.received ? '#166534' : '#92400E'};border-color:${i.received ? '#86EFAC' : '#FDE68A'}">${i.received ? 'Đã thu' : 'Chưa thu'}</span>
+              </div>
+              <div style="font-size:15px;font-weight:800;">${i.title}</div>
+              <div style="font-size:18px;font-weight:800;color:#059669;margin:4px 0 10px;">+${i.amount.toLocaleString('vi-VN')} đ</div>
+              <button class="btn-3d" style="width:100%;background:${i.received ? '#F1F5F9' : '#059669'};color:${i.received ? '#334155' : '#fff'};border-color:${i.received ? '#CBD5E1' : '#059669'}" onclick="toggleReceive(${i.id})">
+                ${i.received ? 'Hoàn tác (Chưa thu)' : 'Đánh dấu Đã thu'}
               </button>
             </div>
           `).join('');
       } else if (currentTab === 'schedule') {
-        box.innerHTML = '<div class="card-3d" style="background:#7dd3fc;"><div style="font-size:16px;font-weight:900;">🎒 LỊCH HỌC & ĐƯA ĐÓN CON</div></div>' +
+        box.innerHTML = '<div class="card-3d" style="background:#EFF6FF;border-color:#BFDBFE;"><div style="font-size:15px;font-weight:800;color:#1E40AF;">LỊCH HỌC & ĐƯA ĐÓN CON HÔM NAY</div></div>' +
           state.schedules.map(s => `
             <div class="card-3d">
               <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-                <span class="badge" style="background:#0f172a;color:#fff;">${s.day}</span>
-                <span class="badge" style="background:#fde68a;">${s.time}</span>
+                <span class="badge" style="background:#0F172A;color:#fff;">${s.day}</span>
+                <span class="badge" style="background:#FEF3C7;color:#92400E;border-color:#FDE68A;">${s.time}</span>
               </div>
-              <div style="font-size:13px;font-weight:900;color:#1d4ed8;">${s.child}</div>
-              <div style="font-size:16px;font-weight:900;margin-bottom:8px;">${s.subject}</div>
+              <div style="font-size:12px;font-weight:800;color:#2563EB;">${s.child}</div>
+              <div style="font-size:16px;font-weight:800;margin-bottom:6px;">${s.subject}</div>
+              <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:7px 10px;font-size:12px;font-weight:700;color:#334155;margin-bottom:8px;">
+                Địa điểm: <strong>${s.location || 'Chưa cập nhật'}</strong>
+              </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                <div style="background:#dbeafe;border:2px solid #0f172a;border-radius:10px;padding:8px;font-size:12px;font-weight:900;">🚗 Đưa: ${s.dropoff}</div>
-                <div style="background:#ffe4e6;border:2px solid #0f172a;border-radius:10px;padding:8px;font-size:12px;font-weight:900;">🛵 Đón: ${s.pickup}</div>
+                <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:8px;font-size:12px;font-weight:700;color:#1E3A8A;">Đưa đi: <strong>${s.dropoff}</strong></div>
+                <div style="background:#FFF1F2;border:1px solid #FECDD3;border-radius:10px;padding:8px;font-size:12px;font-weight:700;color:#881337;">Đón về: <strong>${s.pickup}</strong></div>
               </div>
             </div>
           `).join('');
       } else if (currentTab === 'events') {
-        box.innerHTML = '<div class="card-3d" style="background:#fda4af;"><div style="font-size:16px;font-weight:900;">🕯️ LỊCH GIỖ & SỰ KIỆN ÂM/DƯƠNG</div></div>' +
+        box.innerHTML = '<div class="card-3d" style="background:#FFF1F2;border-color:#FECDD3;"><div style="font-size:15px;font-weight:800;color:#9F1239;">LỊCH GIỖ & SỰ KIỆN ÂM/DƯƠNG</div></div>' +
           state.events.map(ev => `
             <div class="card-3d">
-              <span class="badge" style="background:#fde68a;">🌙 ${ev.date}</span>
-              <div style="font-size:17px;font-weight:900;margin-top:6px;">${ev.title}</div>
-              <div style="font-size:12px;font-weight:700;color:#334155;margin-top:4px;">📝 ${ev.note}</div>
+              <span class="badge" style="background:#FEF3C7;color:#92400E;border-color:#FDE68A;">${ev.date}</span>
+              <div style="font-size:16px;font-weight:800;margin-top:6px;">${ev.title}</div>
+              <div style="font-size:12px;font-weight:600;color:#475569;margin-top:4px;">${ev.note}</div>
             </div>
           `).join('');
       } else {
-        box.innerHTML = '<div class="card-3d" style="background:#c4b5fd;"><div style="font-size:16px;font-weight:900;">🔐 KHO TÀI KHOẢN & GIẤY TỜ</div></div>' +
+        box.innerHTML = '<div class="card-3d" style="background:#F5F3FF;border-color:#DDD6FE;"><div style="font-size:15px;font-weight:800;color:#5B21B6;">KHO TÀI KHOẢN & GIẤY TỜ</div></div>' +
           state.accounts.map(a => `
             <div class="card-3d">
-              <div style="font-size:15px;font-weight:900;margin-bottom:6px;">${a.title}</div>
-              <div style="background:#f1f5f9;border:2px solid #0f172a;border-radius:10px;padding:8px;font-size:13px;font-weight:900;margin-bottom:6px;">User/Mã số: ${a.user}</div>
-              <div style="background:#fef3c7;border:2px solid #0f172a;border-radius:10px;padding:8px;font-size:13px;font-weight:900;">Pass/Nơi cấp: ${a.pass}</div>
+              <div style="font-size:15px;font-weight:800;margin-bottom:6px;">${a.title}</div>
+              <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:8px;font-size:13px;font-weight:700;margin-bottom:6px;">User/Mã số: ${a.user}</div>
+              <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:10px;padding:8px;font-size:13px;font-weight:700;">Pass/Nơi cấp: ${a.pass}</div>
             </div>
           `).join('');
       }

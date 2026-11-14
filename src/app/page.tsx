@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Wallet,
@@ -19,7 +19,6 @@ import {
   Eye,
   EyeOff,
   LogOut,
-  LogIn,
   GraduationCap,
   Car,
   Bike,
@@ -34,6 +33,24 @@ import {
   Search,
   Database,
   Smartphone,
+  Home,
+  Sun,
+  Moon,
+  Crown,
+  Lock,
+  AlertCircle,
+  Calendar,
+  Lightbulb,
+  User,
+  Flame,
+  FileText,
+  Trophy,
+  School,
+  Zap,
+  Link2,
+  Camera,
+  Building2,
+  Download,
 } from "lucide-react";
 import { solarToLunar, getCurrentPeriodKeys } from "@/lib/lunar";
 
@@ -82,6 +99,21 @@ interface IncomeItem {
   receivedBy: number | null;
   receivedByName: string;
   note: string;
+  isReceived: boolean;
+  receipt: {
+    id: number;
+    receivedAmount: number;
+    receivedByName: string;
+    receivedAt: string;
+    note: string;
+  } | null;
+  history: Array<{
+    id: number;
+    periodKey: string;
+    receivedAmount: number;
+    receivedByName: string;
+    receivedAt: string;
+  }>;
 }
 
 interface SharedAccountItem {
@@ -282,12 +314,16 @@ export default function FamilyHubPage() {
   const [docHolderFilter, setDocHolderFilter] = useState<string>("all");
 
   // UI States
+  const [isTopbarHidden, setIsTopbarHidden] = useState(false);
+  const lastScrollYRef = useRef(0);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [visiblePasswords, setVisiblePasswords] = useState<
     Record<number, boolean>
   >({});
   const [historyModalExpense, setHistoryModalExpense] =
     useState<ExpenseItem | null>(null);
+  const [historyModalIncome, setHistoryModalIncome] =
+    useState<IncomeItem | null>(null);
   const [previewDoc, setPreviewDoc] = useState<PersonalDocumentItem | null>(
     null
   );
@@ -440,7 +476,9 @@ export default function FamilyHubPage() {
           fetch(
             `/api/expenses?monthlyKey=${monthlyKey}&yearlyKey=${yearlyKey}`
           ).then((r) => r.json()),
-          fetch("/api/incomes").then((r) => r.json()),
+          fetch(
+            `/api/incomes?monthlyKey=${monthlyKey}&yearlyKey=${yearlyKey}`
+          ).then((r) => r.json()),
           fetch("/api/accounts").then((r) => r.json()),
           fetch("/api/documents").then((r) => r.json()),
           fetch("/api/events").then((r) => r.json()),
@@ -464,6 +502,43 @@ export default function FamilyHubPage() {
     loadAllData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monthlyKey, yearlyKey]);
+
+  // Tự động ẩn Topbar khi cuộn trang xuống hoặc xem chi tiết, hiện lại khi cuộn lên đầu trang
+  useEffect(() => {
+    function handleScroll() {
+      const currentY = window.scrollY;
+      const prevY = lastScrollYRef.current;
+
+      if (currentY <= 24) {
+        setIsTopbarHidden(false);
+      } else if (currentY > prevY + 6 && currentY > 48) {
+        setIsTopbarHidden(true);
+      } else if (currentY < prevY - 10) {
+        setIsTopbarHidden(false);
+      }
+
+      lastScrollYRef.current = currentY;
+    }
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const hasActiveDetailView = Boolean(
+    historyModalExpense ||
+      historyModalIncome ||
+      previewDoc ||
+      showExpenseForm ||
+      showIncomeForm ||
+      showScheduleForm ||
+      showEventForm ||
+      showAccountForm ||
+      showDocForm ||
+      showMemberForm ||
+      editingMemberId
+  );
+
+  const shouldHideTopbar = isTopbarHidden || hasActiveDetailView;
 
   function copyToClipboard(text: string, key: string) {
     navigator.clipboard.writeText(text);
@@ -528,6 +603,29 @@ export default function FamilyHubPage() {
           paidAmount: exp.amount,
           paidBy: currentUser?.id || 1,
           note: `${currentUser?.fullName || "Thành viên"} đánh dấu đã đóng`,
+        }),
+      });
+    }
+    await loadAllData();
+  }
+
+  // Toggle Đã thu / Chưa thu theo kỳ
+  async function handleToggleReceiveIncome(inc: IncomeItem) {
+    if (inc.isReceived) {
+      await fetch(
+        `/api/incomes/receive?incomeId=${inc.id}&periodKey=${inc.periodKey}`,
+        { method: "DELETE" }
+      );
+    } else {
+      await fetch("/api/incomes/receive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          incomeId: inc.id,
+          periodKey: inc.periodKey,
+          receivedAmount: inc.amount,
+          receivedBy: currentUser?.id || inc.receivedBy || 1,
+          note: `${currentUser?.fullName || "Thành viên"} đánh dấu đã thu`,
         }),
       });
     }
@@ -965,9 +1063,10 @@ export default function FamilyHubPage() {
 
   if (!currentUser) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-[#f4f6fb]">
-        <div className="card-3d bg-amber-300 px-6 py-4 font-black text-slate-950 text-base">
-          🔒 Đang kiểm tra phiên đăng nhập bảo mật...
+      <div className="min-h-screen flex flex-col items-center justify-center p-4">
+        <div className="card-3d bg-white px-6 py-4 font-bold text-slate-800 text-sm flex items-center gap-2.5 shadow-lg">
+          <Lock className="w-4 h-4 text-blue-600" aria-hidden="true" />
+          <span>Đang kiểm tra phiên đăng nhập bảo mật...</span>
         </div>
       </div>
     );
@@ -975,43 +1074,46 @@ export default function FamilyHubPage() {
 
   return (
     <div className="min-h-screen pb-28 md:pb-12">
-      {/* TOP BAR NỔI KHỐI */}
-      <header className="sticky top-0 z-30 bg-amber-300 border-b-[3px] border-slate-950 shadow-[0_4px_0_#0f172a]">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-slate-950 text-amber-300 flex items-center justify-center font-black text-xl border-2 border-slate-950 shadow-[0_3px_0_#334155]">
-              🏠
+      {/* TOP BAR GỌN NHẸ (TỰ ĐỘNG ẨN KHI CUỘN HOẶC XEM CHI TIẾT) */}
+      <header
+        className={`sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200/80 shadow-xs transition-all duration-300 ease-in-out ${
+          shouldHideTopbar
+            ? "-translate-y-full opacity-0 pointer-events-none"
+            : "translate-y-0 opacity-100"
+        }`}
+      >
+        <div className="max-w-7xl mx-auto px-3.5 md:px-4 py-2 md:py-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 md:w-11 md:h-11 rounded-xl md:rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-sm shadow-blue-600/20 shrink-0">
+              <Home className="w-4 h-4 md:w-5 md:h-5" aria-hidden="true" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl md:text-2xl font-black tracking-tight text-slate-950">
-                  QUẢN LÝ GIA ĐÌNH
-                </h1>
-                <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-extrabold bg-slate-950 text-amber-300 rounded-full">
-                  <Sparkles className="w-3 h-3" /> Tổ Ấm Số
-                </span>
-              </div>
-              <p className="text-xs md:text-sm font-extrabold text-slate-900">
-                ☀️ {todayInfo.solarStr} • 🌙 {todayInfo.lunarStr}
-              </p>
+            <div className="flex items-center gap-2 min-w-0">
+              <h1 className="text-base md:text-xl font-extrabold tracking-tight text-slate-900 truncate">
+                Quản Lý Gia Đình
+              </h1>
+              <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200/80 rounded-full shrink-0">
+                <Sparkles className="w-3 h-3 text-blue-600" aria-hidden="true" />
+                <span>Tổ Ấm Số</span>
+              </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {currentUser && (
-              <div className="badge-3d bg-white px-3 py-1.5 flex items-center gap-2 text-xs md:text-sm">
+              <div className="badge-3d bg-slate-50 border-slate-200 px-2.5 py-1 md:px-3 md:py-1.5 flex items-center gap-1.5 md:gap-2 text-xs md:text-sm">
                 <span
-                  className="w-6 h-6 rounded-full text-white flex items-center justify-center font-black text-xs border border-slate-950"
+                  className="w-5 h-5 md:w-6 md:h-6 rounded-full text-white flex items-center justify-center font-bold text-[11px] md:text-xs shadow-xs shrink-0"
                   style={{ backgroundColor: currentUser.avatarColor }}
                 >
                   {currentUser.fullName.charAt(0)}
                 </span>
-                <span className="font-black text-slate-950">
+                <span className="font-bold text-slate-900 max-w-[110px] sm:max-w-none truncate">
                   {currentUser.fullName}
                 </span>
                 {currentUser.isAdmin && (
-                  <span className="px-2 py-0.5 rounded-full bg-slate-950 text-amber-300 text-[10px] font-black uppercase">
-                    👑 ADMIN
+                  <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-extrabold uppercase">
+                    <Crown className="w-3 h-3 text-amber-600" aria-hidden="true" />
+                    <span>Admin</span>
                   </span>
                 )}
               </div>
@@ -1019,123 +1121,141 @@ export default function FamilyHubPage() {
             <button
               type="button"
               onClick={handleLogout}
-              className="btn-3d bg-rose-500 hover:bg-rose-400 text-white px-3 py-1.5 text-xs md:text-sm"
+              aria-label="Đăng xuất tài khoản"
+              className="btn-3d bg-white hover:bg-rose-50 text-rose-600 border-slate-200 hover:border-rose-200 px-2.5 py-1.5 md:px-3.5 md:py-2 text-xs md:text-sm"
               title="Đăng xuất tài khoản"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-4 h-4" aria-hidden="true" />
               <span className="hidden sm:inline">Đăng xuất</span>
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 pt-5">
-        {/* THANH NHẮC VIỆC KHẨN CẤP TRONG NGÀY (QUICK REMINDERS) */}
+      <main className="max-w-7xl mx-auto px-4 pt-6">
+        {/* BENTO QUICK REMINDERS ROW */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <button
             type="button"
             onClick={() => setActiveTab("finance")}
-            className="card-3d card-3d-interactive p-4 bg-amber-100 text-left flex items-center justify-between"
+            className="card-3d card-3d-interactive p-5 bg-gradient-to-br from-white via-white to-amber-50/70 border-amber-200/80 text-left flex items-center justify-between gap-3"
           >
-            <div>
-              <div className="text-xs font-black uppercase text-amber-900 tracking-wider">
+            <div className="min-w-0">
+              <div className="text-xs font-bold uppercase text-amber-800 tracking-wider">
                 Khoản đóng định kỳ
               </div>
-              <div className="text-lg font-black text-slate-950 mt-0.5">
+              <div className="text-base md:text-lg font-extrabold text-slate-900 mt-1">
                 {financeSummary.unpaidCount > 0
                   ? `Còn ${financeSummary.unpaidCount} khoản chưa đóng`
                   : "Đã hoàn tất mọi khoản!"}
               </div>
-              <div className="text-xs font-bold text-slate-800 mt-0.5">
-                Cần đóng: {formatVND(financeSummary.totalUnpaid)}
+              <div className="text-xs font-semibold text-slate-600 mt-1 tabular-nums">
+                Cần đóng:{" "}
+                <span className="font-bold text-amber-900">
+                  {formatVND(financeSummary.totalUnpaid)}
+                </span>
               </div>
             </div>
-            <div className="w-12 h-12 rounded-2xl bg-amber-400 border-2 border-slate-950 flex items-center justify-center shadow-[0_3px_0_#0f172a]">
-              <Wallet className="w-6 h-6 text-slate-950" />
+            <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 border border-amber-200 flex items-center justify-center shrink-0">
+              <Wallet className="w-6 h-6" aria-hidden="true" />
             </div>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab("schedule")}
-            className="card-3d card-3d-interactive p-4 bg-sky-100 text-left flex items-center justify-between"
+            className="card-3d card-3d-interactive p-5 bg-gradient-to-br from-white via-white to-sky-50/70 border-sky-200/80 text-left flex items-center justify-between gap-3"
           >
-            <div>
-              <div className="text-xs font-black uppercase text-sky-900 tracking-wider">
+            <div className="min-w-0">
+              <div className="text-xs font-bold uppercase text-sky-800 tracking-wider">
                 Lịch con hôm nay ({DAY_NAMES[todayInfo.isoDay]})
               </div>
-              <div className="text-lg font-black text-slate-950 mt-0.5">
+              <div className="text-base md:text-lg font-extrabold text-slate-900 mt-1">
                 {todaySchedules.length > 0
                   ? `${todaySchedules.length} ca học cần đưa đón`
                   : "Hôm nay không có ca học"}
               </div>
-              <div className="text-xs font-bold text-slate-800 mt-0.5 truncate max-w-[230px]">
+              <div className="text-xs font-semibold text-slate-600 mt-1 truncate">
                 {todaySchedules[0]
-                  ? `${todaySchedules[0].startTime}: ${todaySchedules[0].childName} (${todaySchedules[0].dropoffName} đưa)`
+                  ? `${todaySchedules[0].startTime}: ${todaySchedules[0].childName} (${todaySchedules[0].dropoffName} đưa)${
+                      todaySchedules[0].location
+                        ? ` • ${todaySchedules[0].location}`
+                        : ""
+                    }`
                   : "Chạm để xem thời khóa biểu tuần"}
               </div>
             </div>
-            <div className="w-12 h-12 rounded-2xl bg-sky-400 border-2 border-slate-950 flex items-center justify-center shadow-[0_3px_0_#0f172a]">
-              <GraduationCap className="w-6 h-6 text-slate-950" />
+            <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 border border-sky-200 flex items-center justify-center shrink-0">
+              <GraduationCap className="w-6 h-6" aria-hidden="true" />
             </div>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab("events")}
-            className="card-3d card-3d-interactive p-4 bg-rose-100 text-left flex items-center justify-between"
+            className="card-3d card-3d-interactive p-5 bg-gradient-to-br from-white via-white to-rose-50/70 border-rose-200/80 text-left flex items-center justify-between gap-3"
           >
-            <div>
-              <div className="text-xs font-black uppercase text-rose-900 tracking-wider">
+            <div className="min-w-0">
+              <div className="text-xs font-bold uppercase text-rose-800 tracking-wider">
                 Lịch giỗ & Sự kiện sắp tới
               </div>
-              <div className="text-lg font-black text-slate-950 mt-0.5 truncate max-w-[230px]">
+              <div className="text-base md:text-lg font-extrabold text-slate-900 mt-1 truncate">
                 {events[0] ? events[0].title : "Chưa có sự kiện"}
               </div>
-              <div className="text-xs font-bold text-rose-950 mt-0.5">
-                {events[0]
-                  ? `⏰ Còn ${events[0].daysUntil} ngày (${events[0].solarDateStr} Dương)`
-                  : "Chạm để thêm lịch Âm / Dương"}
+              <div className="text-xs font-semibold text-rose-700 mt-1 inline-flex items-center gap-1 tabular-nums">
+                {events[0] ? (
+                  <>
+                    <Clock className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                    <span>
+                      Còn {events[0].daysUntil} ngày ({events[0].solarDateStr} Dương)
+                    </span>
+                  </>
+                ) : (
+                  <span>Chạm để thêm lịch Âm / Dương</span>
+                )}
               </div>
             </div>
-            <div className="w-12 h-12 rounded-2xl bg-rose-400 border-2 border-slate-950 flex items-center justify-center shadow-[0_3px_0_#0f172a]">
-              <BellRing className="w-6 h-6 text-slate-950" />
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-700 border border-rose-200 flex items-center justify-center shrink-0">
+              <BellRing className="w-6 h-6" aria-hidden="true" />
             </div>
           </button>
         </div>
 
         {/* THANH ĐIỀU HƯỚNG 5 PHÂN HỆ TRÊN DESKTOP */}
-        <nav className="hidden md:grid grid-cols-5 gap-3 mb-6">
+        <nav
+          aria-label="Phân hệ quản lý chính"
+          className="hidden md:grid grid-cols-5 gap-2.5 mb-6 p-1.5 bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/90 shadow-xs"
+        >
           {[
             {
               id: "finance",
-              label: "1. Thu - Chi Định Kỳ",
+              label: "Thu - Chi Định Kỳ",
               icon: Wallet,
-              activeColor: "bg-emerald-400 text-slate-950",
+              activeColor: "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-600/20",
             },
             {
               id: "schedule",
-              label: "2. Lịch Học & Đưa Đón",
+              label: "Lịch Học & Đưa Đón",
               icon: GraduationCap,
-              activeColor: "bg-sky-400 text-slate-950",
+              activeColor: "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-600/20",
             },
             {
               id: "events",
-              label: "3. Lịch Giỗ & Sự Kiện",
+              label: "Lịch Giỗ & Sự Kiện",
               icon: CalendarClock,
-              activeColor: "bg-rose-400 text-slate-950",
+              activeColor: "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-600/20",
             },
             {
               id: "vault",
-              label: "4. Tài Khoản & Giấy Tờ",
+              label: "Tài Khoản & Giấy Tờ",
               icon: KeyRound,
-              activeColor: "bg-violet-400 text-slate-950",
+              activeColor: "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-600/20",
             },
             {
               id: "members",
-              label: "5. Thành Viên Gia Đình",
+              label: "Thành Viên Gia Đình",
               icon: Users,
-              activeColor: "bg-amber-400 text-slate-950",
+              activeColor: "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-600/20",
             },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -1144,6 +1264,7 @@ export default function FamilyHubPage() {
               <button
                 key={tab.id}
                 type="button"
+                aria-current={isActive ? "page" : undefined}
                 onClick={() =>
                   setActiveTab(
                     tab.id as
@@ -1154,13 +1275,13 @@ export default function FamilyHubPage() {
                       | "members"
                   )
                 }
-                className={`btn-3d py-3.5 px-4 text-sm md:text-base ${
+                className={`btn-3d py-3 px-3.5 text-sm ${
                   isActive
                     ? tab.activeColor
-                    : "bg-white hover:bg-slate-100 text-slate-900"
+                    : "bg-transparent border-transparent shadow-none hover:bg-slate-100 text-slate-700"
                 }`}
               >
-                <Icon className="w-5 h-5 shrink-0" />
+                <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
                 <span>{tab.label}</span>
               </button>
             );
@@ -1172,66 +1293,66 @@ export default function FamilyHubPage() {
            ===================================================================== */}
         {activeTab === "finance" && (
           <div className="space-y-6">
-            {/* 4 Thẻ thống kê nổi khối độ tương phản cao */}
+            {/* 4 Thẻ thống kê Bento Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="card-3d p-5 bg-emerald-400 text-slate-950">
+              <div className="card-3d p-5 bg-gradient-to-br from-emerald-600 to-teal-700 text-white border-emerald-500/30">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-black uppercase tracking-wider">
-                    TỔNG THU THÁNG NÀY
+                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-100">
+                    Tổng thu tháng này
                   </span>
-                  <ArrowUpCircle className="w-6 h-6" />
+                  <ArrowUpCircle className="w-5 h-5 text-emerald-200" aria-hidden="true" />
                 </div>
-                <div className="text-2xl font-black mt-2">
+                <div className="text-2xl font-extrabold mt-2 tabular-nums">
                   {formatVND(financeSummary.monthlyIncomeTotal)}
                 </div>
-                <div className="text-xs font-extrabold mt-1 text-slate-900">
+                <div className="text-xs font-medium mt-1.5 text-emerald-100 tabular-nums">
                   + Quý: {formatVND(financeSummary.quarterlyIncomeTotal)} • Năm:{" "}
                   {formatVND(financeSummary.yearlyIncomeTotal)}
                 </div>
               </div>
 
-              <div className="card-3d p-5 bg-white text-slate-950">
+              <div className="card-3d p-5 bg-white text-slate-900">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-black uppercase tracking-wider text-slate-700">
-                    TỔNG KHOẢN PHẢI ĐÓNG
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Tổng khoản phải đóng
                   </span>
-                  <ArrowDownCircle className="w-6 h-6 text-rose-600" />
+                  <ArrowDownCircle className="w-5 h-5 text-blue-600" aria-hidden="true" />
                 </div>
-                <div className="text-2xl font-black mt-2">
+                <div className="text-2xl font-extrabold mt-2 text-slate-900 tabular-nums">
                   {formatVND(financeSummary.totalDue)}
                 </div>
-                <div className="text-xs font-extrabold mt-1 text-slate-700">
+                <div className="text-xs font-medium mt-1.5 text-slate-600">
                   Tổng cộng {expenses.length} khoản định kỳ
                 </div>
               </div>
 
-              <div className="card-3d p-5 bg-sky-300 text-slate-950">
+              <div className="card-3d p-5 bg-gradient-to-br from-white to-sky-50/80 border-sky-200/80 text-slate-900">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-black uppercase tracking-wider">
-                    ĐÃ ĐÓNG TRONG KỲ
+                  <span className="text-xs font-bold uppercase tracking-wider text-sky-800">
+                    Đã đóng trong kỳ
                   </span>
-                  <CheckCircle2 className="w-6 h-6" />
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600" aria-hidden="true" />
                 </div>
-                <div className="text-2xl font-black mt-2">
+                <div className="text-2xl font-extrabold mt-2 text-emerald-700 tabular-nums">
                   {formatVND(financeSummary.totalPaid)}
                 </div>
-                <div className="text-xs font-extrabold mt-1">
+                <div className="text-xs font-semibold mt-1.5 text-slate-600 tabular-nums">
                   Hoàn thành {financeSummary.paidCount}/{expenses.length} khoản (
                   {financeSummary.progressPercent}%)
                 </div>
               </div>
 
-              <div className="card-3d p-5 bg-amber-300 text-slate-950">
+              <div className="card-3d p-5 bg-gradient-to-br from-white to-amber-50/80 border-amber-200/80 text-slate-900">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-black uppercase tracking-wider">
-                    CÒN PHẢI ĐÓNG
+                  <span className="text-xs font-bold uppercase tracking-wider text-amber-900">
+                    Còn phải đóng
                   </span>
-                  <Clock className="w-6 h-6" />
+                  <Clock className="w-5 h-5 text-amber-600" aria-hidden="true" />
                 </div>
-                <div className="text-2xl font-black mt-2 text-rose-900">
+                <div className="text-2xl font-extrabold mt-2 text-rose-600 tabular-nums">
                   {formatVND(financeSummary.totalUnpaid)}
                 </div>
-                <div className="text-xs font-extrabold mt-1">
+                <div className="text-xs font-semibold mt-1.5 text-slate-600">
                   Còn {financeSummary.unpaidCount} khoản chờ thanh toán
                 </div>
               </div>
@@ -1239,27 +1360,34 @@ export default function FamilyHubPage() {
 
             {/* Thanh tiến độ đóng tiền định kỳ */}
             <div className="card-3d p-5 bg-white">
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                <span className="font-black text-slate-950 text-sm md:text-base">
-                  TIẾN ĐỘ ĐÓNG CÁC KHOẢN ĐỊNH KỲ TRONG KỲ ({financeSummary.progressPercent}%)
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <span className="font-bold text-slate-900 text-sm md:text-base tabular-nums">
+                  Tiến độ thanh toán các khoản định kỳ ({financeSummary.progressPercent}%)
                 </span>
-                <div className="flex flex-wrap items-center gap-2 text-xs font-black">
+                <div className="flex flex-wrap items-center gap-2 text-xs font-bold tabular-nums">
                   <input
                     type="month"
+                    aria-label="Chọn kỳ tháng"
                     value={monthlyKey}
                     onChange={(e) => {
                       if (e.target.value) setMonthlyKey(e.target.value);
                     }}
-                    className="badge-3d bg-amber-200 px-2.5 py-1 cursor-pointer"
+                    className="badge-3d bg-blue-50 text-blue-800 border-blue-200 px-3 py-1 cursor-pointer"
                   />
-                  <span className="badge-3d bg-slate-100 px-3 py-1">
+                  <span className="badge-3d bg-slate-100 text-slate-700 border-slate-200 px-3 py-1">
                     Năm: {yearlyKey}
                   </span>
                 </div>
               </div>
-              <div className="w-full h-6 rounded-full bg-slate-200 border-2 border-slate-950 overflow-hidden p-0.5">
+              <div
+                role="progressbar"
+                aria-valuenow={financeSummary.progressPercent}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                className="w-full h-3.5 rounded-full bg-slate-100 border border-slate-200 overflow-hidden"
+              >
                 <div
-                  className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+                  className="h-full rounded-full bg-gradient-to-r from-blue-600 to-emerald-500 transition-all duration-300"
                   style={{ width: `${financeSummary.progressPercent}%` }}
                 />
               </div>
@@ -1269,11 +1397,11 @@ export default function FamilyHubPage() {
             <div className="card-3d p-5 md:p-6 bg-white">
               <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
                 <div>
-                  <h2 className="text-xl font-black text-slate-950">
-                    CÁC KHOẢN PHẢI ĐÓNG ĐỊNH KỲ (THÁNG / NĂM)
+                  <h2 className="text-lg md:text-xl font-bold text-slate-900">
+                    Các khoản phải đóng định kỳ (Tháng / Năm)
                   </h2>
-                  <p className="text-xs md:text-sm font-bold text-slate-700">
-                    Bấm &ldquo;Đánh dấu Đã đóng&rdquo; khi thanh toán xong hoặc bấm &ldquo;Sửa&rdquo; để cập nhật
+                  <p className="text-xs md:text-sm font-medium text-slate-600 mt-0.5">
+                    Bấm &ldquo;Đánh dấu Đã đóng&rdquo; khi thanh toán xong hoặc bấm biểu tượng bút chì để cập nhật
                   </p>
                 </div>
                 <button
@@ -1286,10 +1414,10 @@ export default function FamilyHubPage() {
                       setShowExpenseForm(!showExpenseForm);
                     }
                   }}
-                  className="btn-3d bg-emerald-400 hover:bg-emerald-300 text-slate-950 px-4 py-2.5 text-sm"
+                  className="btn-3d bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-sm"
                 >
-                  <Plus className="w-5 h-5" />
-                  Thêm Khoản Đóng
+                  <Plus className="w-4 h-4" aria-hidden="true" />
+                  <span>Thêm Khoản Đóng</span>
                 </button>
               </div>
 
@@ -1320,8 +1448,8 @@ export default function FamilyHubPage() {
                     }
                     className={`btn-3d px-4 py-2 text-xs md:text-sm ${
                       expenseCycleFilter === f.id
-                        ? "bg-slate-950 text-amber-300"
-                        : "bg-slate-100 text-slate-900"
+                        ? "bg-slate-900 text-white border-slate-900"
+                        : "bg-slate-100 hover:bg-slate-200/80 text-slate-700 border-slate-200"
                     }`}
                   >
                     {f.label}
@@ -1333,26 +1461,35 @@ export default function FamilyHubPage() {
               {showExpenseForm && (
                 <form
                   onSubmit={handleCreateExpense}
-                  className="card-3d-sm bg-amber-50 p-4 md:p-5 mb-6 space-y-4"
+                  className="card-3d-sm bg-slate-50/90 border-blue-200 p-4 md:p-5 mb-6 space-y-4"
                 >
                   <div className="flex items-center justify-between">
-                    <h3 className="font-black text-base text-slate-950">
-                      {editingExpenseId
-                        ? "✏️ CHỈNH SỬA KHOẢN PHẢI ĐÓNG ĐỊNH KỲ"
-                        : "➕ THÊM KHOẢN PHẢI ĐÓNG ĐỊNH KỲ MỚI (THÁNG / NĂM)"}
+                    <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                      {editingExpenseId ? (
+                        <>
+                          <Pencil className="w-4 h-4 text-blue-600" aria-hidden="true" />
+                          <span>Chỉnh sửa khoản phải đóng định kỳ</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4 text-blue-600" aria-hidden="true" />
+                          <span>Thêm khoản phải đóng định kỳ mới (Tháng / Năm)</span>
+                        </>
+                      )}
                     </h3>
                     <button
                       type="button"
                       onClick={resetExpenseForm}
-                      className="text-slate-700 font-black"
+                      aria-label="Đóng biểu mẫu"
+                      className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-200/70"
                     >
-                      <X className="w-5 h-5" />
+                      <X className="w-5 h-5" aria-hidden="true" />
                     </button>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-xs font-black mb-1">
-                        TÊN KHOẢN ĐÓNG *
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Tên khoản đóng *
                       </label>
                       <input
                         type="text"
@@ -1364,8 +1501,8 @@ export default function FamilyHubPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-black mb-1">
-                        SỐ TIỀN DỰ KIẾN (VNĐ) *
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Số tiền dự kiến (VNĐ) *
                       </label>
                       <input
                         type="number"
@@ -1373,12 +1510,12 @@ export default function FamilyHubPage() {
                         placeholder="VD: 1500000"
                         value={expAmount}
                         onChange={(e) => setExpAmount(e.target.value)}
-                        className="input-3d"
+                        className="input-3d tabular-nums"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-black mb-1">
-                        CHU KỲ ĐỊNH KỲ *
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Chu kỳ định kỳ *
                       </label>
                       <select
                         value={expCycle}
@@ -1395,8 +1532,8 @@ export default function FamilyHubPage() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="grid grid-cols-2 gap-2">
                       <div className={expCycle === "yearly" ? "" : "col-span-2"}>
-                        <label className="block text-xs font-black mb-1">
-                          NGÀY HẠN ĐÓNG (1-31)
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                          Ngày hạn đóng (1-31)
                         </label>
                         <input
                           type="number"
@@ -1404,13 +1541,13 @@ export default function FamilyHubPage() {
                           max={31}
                           value={expDueDay}
                           onChange={(e) => setExpDueDay(Number(e.target.value))}
-                          className="input-3d"
+                          className="input-3d tabular-nums"
                         />
                       </div>
                       {expCycle === "yearly" && (
                         <div>
-                          <label className="block text-xs font-black mb-1">
-                            THÁNG ĐÓNG (1-12)
+                          <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                            Tháng đóng (1-12)
                           </label>
                           <input
                             type="number"
@@ -1420,14 +1557,14 @@ export default function FamilyHubPage() {
                             onChange={(e) =>
                               setExpDueMonth(Number(e.target.value))
                             }
-                            className="input-3d"
+                            className="input-3d tabular-nums"
                           />
                         </div>
                       )}
                     </div>
                     <div>
-                      <label className="block text-xs font-black mb-1">
-                        DANH MỤC
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Danh mục
                       </label>
                       <select
                         value={expCategory}
@@ -1444,8 +1581,8 @@ export default function FamilyHubPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-black mb-1">
-                        GHI CHÚ (MÃ KH, SỐ TK...)
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Ghi chú (Mã KH, Số TK...)
                       </label>
                       <input
                         type="text"
@@ -1461,14 +1598,14 @@ export default function FamilyHubPage() {
                       <button
                         type="button"
                         onClick={resetExpenseForm}
-                        className="btn-3d bg-slate-200 text-slate-900 px-4 py-2.5 text-sm"
+                        className="btn-3d bg-white text-slate-700 border-slate-300 px-4 py-2.5 text-sm"
                       >
                         Hủy
                       </button>
                     )}
                     <button
                       type="submit"
-                      className="btn-3d bg-blue-600 text-white px-6 py-2.5 text-sm"
+                      className="btn-3d bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 text-sm"
                     >
                       {editingExpenseId
                         ? "Cập Nhật Khoản Đóng"
@@ -1484,111 +1621,135 @@ export default function FamilyHubPage() {
                   const cycleBadge =
                     exp.cycle === "monthly"
                       ? {
-                          text: "ĐỊNH KỲ THÁNG",
-                          bg: "bg-sky-200 text-slate-950",
+                          text: "Định kỳ tháng",
+                          bg: "bg-sky-50 text-sky-800 border-sky-200",
                           dueText: `Ngày ${exp.dueDay} hàng tháng`,
                         }
                       : {
-                          text: "ĐỊNH KỲ NĂM",
-                          bg: "bg-amber-200 text-slate-950",
+                          text: "Định kỳ năm",
+                          bg: "bg-amber-50 text-amber-900 border-amber-200",
                           dueText: `Ngày ${exp.dueDay}/${exp.dueMonth} hàng năm`,
                         };
 
                   return (
                     <div
                       key={exp.id}
-                      className={`card-3d-sm p-4 md:p-5 flex flex-col justify-between gap-3 ${
-                        exp.isPaid ? "bg-emerald-50" : "bg-white"
+                      className={`card-3d-sm p-4 md:p-5 flex flex-col justify-between gap-3.5 ${
+                        exp.isPaid
+                          ? "bg-emerald-50/40 border-emerald-200/90"
+                          : "bg-white"
                       }`}
                     >
                       <div>
-                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                          <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
                             <span
                               className={`badge-3d px-2.5 py-0.5 text-xs ${cycleBadge.bg}`}
                             >
                               {cycleBadge.text}
                             </span>
-                            <span className="badge-3d px-2.5 py-0.5 text-xs bg-slate-100 text-slate-900">
+                            <span className="badge-3d px-2.5 py-0.5 text-xs bg-slate-100 text-slate-700 border-slate-200">
                               {exp.category}
                             </span>
                           </div>
                           <span
                             className={`badge-3d px-3 py-0.5 text-xs ${
                               exp.isPaid
-                                ? "bg-emerald-500 text-slate-950"
-                                : "bg-rose-500 text-white"
+                                ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                : "bg-rose-50 text-rose-700 border-rose-200"
                             }`}
                           >
-                            {exp.isPaid ? "✓ ĐÃ ĐÓNG" : "⏳ CHƯA ĐÓNG"}
+                            {exp.isPaid ? (
+                              <>
+                                <Check className="w-3.5 h-3.5" aria-hidden="true" />
+                                <span>Đã đóng</span>
+                              </>
+                            ) : (
+                              <>
+                                <Clock className="w-3.5 h-3.5" aria-hidden="true" />
+                                <span>Chưa đóng</span>
+                              </>
+                            )}
                           </span>
                         </div>
 
-                        <h3 className="text-lg font-black text-slate-950">
+                        <h3 className="text-base md:text-lg font-bold text-slate-900">
                           {exp.title}
                         </h3>
-                        <div className="text-2xl font-black text-blue-700 mt-1">
+                        <div className="text-2xl font-extrabold text-blue-600 mt-1 tabular-nums">
                           {formatVND(exp.amount)}
                         </div>
-                        <div className="text-xs font-extrabold text-slate-700 mt-1">
-                          📅 Hạn đóng: {cycleBadge.dueText} • Kỳ hiện tại:{" "}
-                          <span className="underline">{exp.periodKey}</span>
+                        <div className="text-xs font-medium text-slate-600 mt-1.5 flex items-center gap-1.5 tabular-nums">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" />
+                          <span>
+                            Hạn đóng: {cycleBadge.dueText} • Kỳ:{" "}
+                            <span className="font-bold text-slate-800">{exp.periodKey}</span>
+                          </span>
                         </div>
                         {exp.note && (
-                          <p className="text-xs font-bold text-slate-600 mt-1 bg-slate-100 p-2 rounded-lg border border-slate-300">
-                            💡 {exp.note}
-                          </p>
+                          <div className="text-xs font-medium text-slate-600 mt-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 flex items-start gap-1.5">
+                            <Lightbulb className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" aria-hidden="true" />
+                            <span>{exp.note}</span>
+                          </div>
                         )}
                         {exp.isPaid && exp.payment && (
-                          <div className="mt-2 text-xs font-black text-emerald-950 bg-emerald-200/80 px-3 py-1.5 rounded-lg border border-emerald-800">
-                            ✅ Đã đóng bởi: {exp.payment.paidByName} (Kỳ{" "}
-                            {exp.periodKey})
+                          <div className="mt-2.5 text-xs font-semibold text-emerald-900 bg-emerald-100/70 px-3 py-2 rounded-xl border border-emerald-200 flex items-center gap-1.5">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" aria-hidden="true" />
+                            <span>
+                              Đã đóng bởi: <strong>{exp.payment.paidByName}</strong> (Kỳ{" "}
+                              {exp.periodKey})
+                            </span>
                           </div>
                         )}
                       </div>
 
-                      <div className="flex items-center justify-between gap-2 pt-2 border-t-2 border-dashed border-slate-200">
+                      <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-200/80">
                         <button
                           type="button"
                           onClick={() => handleTogglePay(exp)}
-                          className={`btn-3d flex-1 py-2.5 px-3 text-xs md:text-sm ${
+                          className={`btn-3d flex-1 py-2 px-3 text-xs md:text-sm ${
                             exp.isPaid
-                              ? "bg-slate-200 hover:bg-slate-300 text-slate-900"
-                              : "bg-emerald-400 hover:bg-emerald-300 text-slate-950"
+                              ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200"
+                              : "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600"
                           }`}
                         >
-                          <CheckCircle2 className="w-4 h-4" />
-                          {exp.isPaid
-                            ? "Hoàn tác (Chưa đóng)"
-                            : "Đánh dấu ĐÃ ĐÓNG"}
+                          <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
+                          <span>
+                            {exp.isPaid
+                              ? "Hoàn tác (Chưa đóng)"
+                              : "Đánh dấu Đã đóng"}
+                          </span>
                         </button>
 
                         <button
                           type="button"
                           onClick={() => setHistoryModalExpense(exp)}
-                          className="btn-3d bg-amber-200 hover:bg-amber-300 text-slate-950 py-2.5 px-3 text-xs"
+                          aria-label={`Lịch sử đóng ${exp.title}`}
+                          className="btn-3d bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200 py-2 px-3 text-xs tabular-nums"
                           title="Lịch sử các kỳ đã đóng"
                         >
-                          <History className="w-4 h-4" />
+                          <History className="w-4 h-4" aria-hidden="true" />
                           <span>({exp.history.length})</span>
                         </button>
 
                         <button
                           type="button"
                           onClick={() => startEditExpense(exp)}
-                          className="btn-3d bg-sky-100 hover:bg-sky-200 text-sky-900 py-2.5 px-3 text-xs"
+                          aria-label={`Sửa ${exp.title}`}
+                          className="btn-3d bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-600 border-slate-200 py-2 px-3 text-xs"
                           title="Sửa khoản đóng"
                         >
-                          <Pencil className="w-4 h-4" />
+                          <Pencil className="w-4 h-4" aria-hidden="true" />
                         </button>
 
                         <button
                           type="button"
                           onClick={() => handleDeleteItem("expenses", exp.id)}
-                          className="btn-3d bg-rose-100 hover:bg-rose-200 text-rose-900 py-2.5 px-3 text-xs"
+                          aria-label={`Xóa ${exp.title}`}
+                          className="btn-3d bg-slate-50 hover:bg-rose-50 text-slate-700 hover:text-rose-600 border-slate-200 py-2 px-3 text-xs"
                           title="Xóa khoản đóng"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-4 h-4" aria-hidden="true" />
                         </button>
                       </div>
                     </div>
@@ -1601,10 +1762,10 @@ export default function FamilyHubPage() {
             <div className="card-3d p-5 md:p-6 bg-white">
               <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
                 <div>
-                  <h2 className="text-xl font-black text-slate-950">
-                    CÁC KHOẢN THU GIA ĐÌNH (THÁNG / NĂM)
+                  <h2 className="text-lg md:text-xl font-bold text-slate-900">
+                    Các khoản thu gia đình (Tháng / Năm)
                   </h2>
-                  <p className="text-xs md:text-sm font-bold text-slate-700">
+                  <p className="text-xs md:text-sm font-medium text-slate-600 mt-0.5">
                     Quản lý nguồn thu nhập hàng tháng và các khoản thưởng/thu nhập hàng năm
                   </p>
                 </div>
@@ -1618,36 +1779,45 @@ export default function FamilyHubPage() {
                       setShowIncomeForm(!showIncomeForm);
                     }
                   }}
-                  className="btn-3d bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 text-sm"
+                  className="btn-3d bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 text-sm"
                 >
-                  <Plus className="w-5 h-5" />
-                  Thêm Khoản Thu
+                  <Plus className="w-4 h-4" aria-hidden="true" />
+                  <span>Thêm Khoản Thu</span>
                 </button>
               </div>
 
               {showIncomeForm && (
                 <form
                   onSubmit={handleCreateIncome}
-                  className="card-3d-sm bg-blue-50 p-4 md:p-5 mb-6 space-y-4"
+                  className="card-3d-sm bg-emerald-50/60 border-emerald-200 p-4 md:p-5 mb-6 space-y-4"
                 >
                   <div className="flex items-center justify-between">
-                    <h3 className="font-black text-base text-slate-950">
-                      {editingIncomeId
-                        ? "✏️ CHỈNH SỬA KHOẢN THU"
-                        : "➕ THÊM KHOẢN THU MỚI (THÁNG / NĂM)"}
+                    <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                      {editingIncomeId ? (
+                        <>
+                          <Pencil className="w-4 h-4 text-emerald-700" aria-hidden="true" />
+                          <span>Chỉnh sửa khoản thu</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4 text-emerald-700" aria-hidden="true" />
+                          <span>Thêm khoản thu mới (Tháng / Năm)</span>
+                        </>
+                      )}
                     </h3>
                     <button
                       type="button"
                       onClick={resetIncomeForm}
-                      className="text-slate-700 font-black"
+                      aria-label="Đóng biểu mẫu"
+                      className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-200/70"
                     >
-                      <X className="w-5 h-5" />
+                      <X className="w-5 h-5" aria-hidden="true" />
                     </button>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
-                      <label className="block text-xs font-black mb-1">
-                        TÊN KHOẢN THU *
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Tên khoản thu *
                       </label>
                       <input
                         type="text"
@@ -1659,8 +1829,8 @@ export default function FamilyHubPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-black mb-1">
-                        SỐ TIỀN THU (VNĐ) *
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Số tiền thu (VNĐ) *
                       </label>
                       <input
                         type="number"
@@ -1668,12 +1838,12 @@ export default function FamilyHubPage() {
                         placeholder="VD: 20000000"
                         value={incAmount}
                         onChange={(e) => setIncAmount(e.target.value)}
-                        className="input-3d"
+                        className="input-3d tabular-nums"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-black mb-1">
-                        CHU KỲ THU
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Chu kỳ thu
                       </label>
                       <select
                         value={incCycle}
@@ -1690,8 +1860,8 @@ export default function FamilyHubPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-black mb-1">
-                        THÀNH VIÊN ĐÓNG GÓP
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Thành viên đóng góp
                       </label>
                       <select
                         value={incReceivedBy}
@@ -1713,14 +1883,14 @@ export default function FamilyHubPage() {
                       <button
                         type="button"
                         onClick={resetIncomeForm}
-                        className="btn-3d bg-slate-200 text-slate-900 px-4 py-2.5 text-sm"
+                        className="btn-3d bg-white text-slate-700 border-slate-300 px-4 py-2.5 text-sm"
                       >
                         Hủy
                       </button>
                     )}
                     <button
                       type="submit"
-                      className="btn-3d bg-emerald-400 text-slate-950 px-6 py-2.5 text-sm"
+                      className="btn-3d bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 text-sm"
                     >
                       {editingIncomeId ? "Cập Nhật Khoản Thu" : "Lưu Khoản Thu"}
                     </button>
@@ -1728,58 +1898,134 @@ export default function FamilyHubPage() {
                 </form>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {incomes.map((inc) => (
                   <div
                     key={inc.id}
-                    className="card-3d-sm p-4 bg-emerald-50/70 flex flex-col justify-between"
+                    className={`card-3d-sm p-4 md:p-5 flex flex-col justify-between gap-3.5 ${
+                      inc.isReceived
+                        ? "bg-emerald-50/50 border-emerald-200/90"
+                        : "bg-white"
+                    }`}
                   >
                     <div>
-                      <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
                         <span
                           className={`badge-3d px-2.5 py-0.5 text-xs ${
                             inc.cycle === "monthly"
-                              ? "bg-emerald-300 text-slate-950"
+                              ? "bg-emerald-100 text-emerald-800 border-emerald-200"
                               : inc.cycle === "quarterly"
-                              ? "bg-sky-300 text-slate-950"
-                              : "bg-amber-300 text-slate-950"
+                              ? "bg-sky-100 text-sky-800 border-sky-200"
+                              : "bg-amber-100 text-amber-900 border-amber-200"
                           }`}
                         >
                           {inc.cycle === "monthly"
-                            ? "THU HÀNG THÁNG"
+                            ? "Thu hàng tháng"
                             : inc.cycle === "quarterly"
-                            ? "THU THEO QUÝ"
-                            : "THU HÀNG NĂM"}
+                            ? "Thu theo quý"
+                            : "Thu hàng năm"}
                         </span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => startEditIncome(inc)}
-                            className="text-blue-700 hover:text-blue-900"
-                            title="Sửa khoản thu"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteItem("incomes", inc.id)}
-                            className="text-rose-700 hover:text-rose-900"
-                            title="Xóa khoản thu"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                        <span
+                          className={`badge-3d px-3 py-0.5 text-xs ${
+                            inc.isReceived
+                              ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                              : "bg-amber-50 text-amber-800 border-amber-200"
+                          }`}
+                        >
+                          {inc.isReceived ? (
+                            <>
+                              <Check className="w-3.5 h-3.5" aria-hidden="true" />
+                              <span>Đã thu</span>
+                            </>
+                          ) : (
+                            <>
+                              <Clock className="w-3.5 h-3.5" aria-hidden="true" />
+                              <span>Chưa thu</span>
+                            </>
+                          )}
+                        </span>
                       </div>
-                      <h3 className="font-black text-base text-slate-950">
+                      <h3 className="font-bold text-base md:text-lg text-slate-900">
                         {inc.title}
                       </h3>
-                      <div className="text-xl font-black text-emerald-800 mt-1">
+                      <div className="text-2xl font-extrabold text-emerald-700 mt-1 tabular-nums">
                         +{formatVND(inc.amount)}
                       </div>
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-600 tabular-nums">
+                        <span className="inline-flex items-center gap-1">
+                          <User className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
+                          <span>Người thu: {inc.receivedByName}</span>
+                        </span>
+                        <span>
+                          Kỳ: <strong className="text-slate-800">{inc.periodKey}</strong>
+                        </span>
+                      </div>
+                      {inc.note && (
+                        <div className="text-xs font-medium text-slate-600 mt-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 flex items-start gap-1.5">
+                          <Lightbulb className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" aria-hidden="true" />
+                          <span>{inc.note}</span>
+                        </div>
+                      )}
+                      {inc.isReceived && inc.receipt && (
+                        <div className="mt-2.5 text-xs font-semibold text-emerald-900 bg-emerald-100/70 px-3 py-2 rounded-xl border border-emerald-200 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" aria-hidden="true" />
+                          <span>
+                            Đã xác nhận thu bởi:{" "}
+                            <strong>{inc.receipt.receivedByName}</strong> (Kỳ{" "}
+                            {inc.periodKey})
+                          </span>
+                        </div>
+                      )}
                     </div>
-                    <div className="mt-3 pt-2 border-t border-emerald-300 flex items-center justify-between text-xs font-extrabold text-slate-700">
-                      <span>👤 {inc.receivedByName}</span>
-                      <span>Kỳ: {inc.periodKey}</span>
+
+                    <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-200/80">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleReceiveIncome(inc)}
+                        className={`btn-3d flex-1 py-2 px-3 text-xs md:text-sm ${
+                          inc.isReceived
+                            ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200"
+                            : "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600"
+                        }`}
+                      >
+                        <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
+                        <span>
+                          {inc.isReceived
+                            ? "Hoàn tác (Chưa thu)"
+                            : "Đánh dấu Đã thu"}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setHistoryModalIncome(inc)}
+                        aria-label={`Lịch sử thu ${inc.title}`}
+                        className="btn-3d bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200 py-2 px-3 text-xs tabular-nums"
+                        title="Lịch sử các kỳ đã thu"
+                      >
+                        <History className="w-4 h-4" aria-hidden="true" />
+                        <span>({inc.history?.length || 0})</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => startEditIncome(inc)}
+                        aria-label={`Sửa ${inc.title}`}
+                        className="btn-3d bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-600 border-slate-200 py-2 px-3 text-xs"
+                        title="Sửa khoản thu"
+                      >
+                        <Pencil className="w-4 h-4" aria-hidden="true" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteItem("incomes", inc.id)}
+                        aria-label={`Xóa ${inc.title}`}
+                        className="btn-3d bg-slate-50 hover:bg-rose-50 text-slate-700 hover:text-rose-600 border-slate-200 py-2 px-3 text-xs"
+                        title="Xóa khoản thu"
+                      >
+                        <Trash2 className="w-4 h-4" aria-hidden="true" />
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -1794,13 +2040,14 @@ export default function FamilyHubPage() {
         {activeTab === "schedule" && (
           <div className="space-y-6">
             {/* Banner Lịch đưa đón hôm nay */}
-            <div className="card-3d p-5 bg-sky-300 text-slate-950">
+            <div className="card-3d p-5 md:p-6 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-700 text-white border-blue-500/30">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <span className="badge-3d bg-slate-950 text-sky-300 px-3 py-0.5 text-xs">
-                    LỊCH ĐƯA ĐÓN HÔM NAY • {DAY_NAMES[todayInfo.isoDay]}
+                  <span className="badge-3d bg-white/15 text-sky-100 border-white/20 px-3 py-0.5 text-xs">
+                    <GraduationCap className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>Lịch đưa đón hôm nay • {DAY_NAMES[todayInfo.isoDay]}</span>
                   </span>
-                  <h2 className="text-xl md:text-2xl font-black mt-1">
+                  <h2 className="text-xl md:text-2xl font-extrabold mt-1.5 text-white">
                     {todaySchedules.length > 0
                       ? `Hôm nay có ${todaySchedules.length} ca học của các con`
                       : "Hôm nay các con không có lịch học đã đăng ký"}
@@ -1816,34 +2063,52 @@ export default function FamilyHubPage() {
                       setShowScheduleForm(!showScheduleForm);
                     }
                   }}
-                  className="btn-3d bg-amber-300 hover:bg-amber-200 text-slate-950 px-4 py-2.5 text-sm"
+                  className="btn-3d bg-white hover:bg-blue-50 text-blue-700 border-white px-4 py-2.5 text-sm shadow-md"
                 >
-                  <Plus className="w-5 h-5" />
-                  Thêm Ca Học / Lịch Đưa Đón
+                  <Plus className="w-4 h-4" aria-hidden="true" />
+                  <span>Thêm Ca Học / Lịch Đưa Đón</span>
                 </button>
               </div>
 
               {todaySchedules.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 mt-4">
                   {todaySchedules.map((s) => (
                     <div
                       key={s.id}
-                      className="card-3d-sm bg-white p-3.5 flex flex-col gap-2"
+                      className="card-3d-sm bg-white text-slate-900 p-4 flex flex-col gap-2.5"
                     >
-                      <div className="flex items-center justify-between">
-                        <span className="font-black text-slate-950 text-base">
-                          🎒 {s.childName} — {s.subject}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-slate-900 text-base flex items-center gap-1.5">
+                          <GraduationCap className="w-4 h-4 text-blue-600 shrink-0" aria-hidden="true" />
+                          <span>
+                            {s.childName} — {s.subject}
+                          </span>
                         </span>
-                        <span className="badge-3d bg-amber-300 px-2.5 py-0.5 text-xs">
+                        <span className="badge-3d bg-amber-50 text-amber-900 border-amber-200 px-2.5 py-0.5 text-xs tabular-nums">
                           {s.startTime} - {s.endTime}
                         </span>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="bg-blue-100 border-2 border-slate-950 rounded-xl p-2 text-xs font-black">
-                          🚗 ĐƯA ĐI: <span className="text-blue-900">{s.dropoffName}</span>
+                      <div className="text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200/80 rounded-xl px-3 py-2 flex items-center gap-1.5">
+                        <MapPin className="w-4 h-4 text-rose-500 shrink-0" aria-hidden="true" />
+                        <span>
+                          Địa điểm:{" "}
+                          <strong className="text-slate-900">
+                            {s.location || "Chưa cập nhật địa điểm"}
+                          </strong>
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-2.5 text-xs font-bold flex items-center gap-1.5">
+                          <Car className="w-4 h-4 text-blue-600 shrink-0" aria-hidden="true" />
+                          <span>
+                            Đưa đi: <strong className="text-blue-900">{s.dropoffName}</strong>
+                          </span>
                         </div>
-                        <div className="bg-rose-100 border-2 border-slate-950 rounded-xl p-2 text-xs font-black">
-                          🛵 ĐÓN VỀ: <span className="text-rose-900">{s.pickupName}</span>
+                        <div className="bg-rose-50 border border-rose-200 rounded-xl p-2.5 text-xs font-bold flex items-center gap-1.5">
+                          <Bike className="w-4 h-4 text-rose-600 shrink-0" aria-hidden="true" />
+                          <span>
+                            Đón về: <strong className="text-rose-900">{s.pickupName}</strong>
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -1856,25 +2121,35 @@ export default function FamilyHubPage() {
             {showScheduleForm && (
               <form
                 onSubmit={handleCreateSchedule}
-                className="card-3d p-5 bg-white space-y-4"
+                className="card-3d p-5 md:p-6 bg-white space-y-4"
               >
                 <div className="flex items-center justify-between">
-                  <h3 className="font-black text-lg text-slate-950">
-                    {editingScheduleId
-                      ? "✏️ CHỈNH SỬA LỊCH HỌC & PHÂN CÔNG ĐƯA ĐÓN"
-                      : "➕ THÊM THỜI KHÓA BIỂU / LỊCH HỌC THÊM & PHÂN CÔNG ĐƯA ĐÓN"}
+                  <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
+                    {editingScheduleId ? (
+                      <>
+                        <Pencil className="w-4 h-4 text-blue-600" aria-hidden="true" />
+                        <span>Chỉnh sửa lịch học & phân công đưa đón</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4 text-blue-600" aria-hidden="true" />
+                        <span>Thêm thời khóa biểu / lịch học thêm & phân công đưa đón</span>
+                      </>
+                    )}
                   </h3>
                   <button
                     type="button"
                     onClick={resetScheduleForm}
+                    aria-label="Đóng biểu mẫu"
+                    className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-5 h-5" aria-hidden="true" />
                   </button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
-                    <label className="block text-xs font-black mb-1">
-                      TÊN BÉ *
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Tên bé *
                     </label>
                     <input
                       type="text"
@@ -1886,8 +2161,8 @@ export default function FamilyHubPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-black mb-1">
-                      MÔN HỌC / HOẠT ĐỘNG *
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Môn học / Hoạt động *
                     </label>
                     <input
                       type="text"
@@ -1899,8 +2174,8 @@ export default function FamilyHubPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-black mb-1">
-                      LOẠI LỊCH HỌC
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Loại lịch học
                     </label>
                     <select
                       value={schType}
@@ -1917,8 +2192,8 @@ export default function FamilyHubPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-black mb-1">
-                      THỨ TRONG TUẦN
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Thứ trong tuần
                     </label>
                     <select
                       value={schDay}
@@ -1936,30 +2211,30 @@ export default function FamilyHubPage() {
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
-                    <label className="block text-xs font-black mb-1">
-                      GIỜ VÀO HỌC
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Giờ vào học
                     </label>
                     <input
                       type="time"
                       value={schStart}
                       onChange={(e) => setSchStart(e.target.value)}
-                      className="input-3d"
+                      className="input-3d tabular-nums"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-black mb-1">
-                      GIỜ TAN HỌC (ĐÓN)
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Giờ tan học (đón)
                     </label>
                     <input
                       type="time"
                       value={schEnd}
                       onChange={(e) => setSchEnd(e.target.value)}
-                      className="input-3d"
+                      className="input-3d tabular-nums"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-black mb-1">
-                      🚗 AI ĐƯA ĐI?
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Ai đưa đi?
                     </label>
                     <input
                       type="text"
@@ -1970,8 +2245,8 @@ export default function FamilyHubPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-black mb-1">
-                      🛵 AI ĐÓN VỀ?
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Ai đón về?
                     </label>
                     <input
                       type="text"
@@ -1985,8 +2260,8 @@ export default function FamilyHubPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-black mb-1">
-                      ĐỊA ĐIỂM HỌC / PHÒNG HỌC
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Địa điểm học / Phòng học
                     </label>
                     <input
                       type="text"
@@ -1997,8 +2272,8 @@ export default function FamilyHubPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-black mb-1">
-                      TÊN & SĐT GIÁO VIÊN
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Tên & SĐT Giáo viên
                     </label>
                     <input
                       type="text"
@@ -2009,8 +2284,8 @@ export default function FamilyHubPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-black mb-1">
-                      GHI CHÚ ĐỒ DÙNG CẦN MANG
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Ghi chú đồ dùng cần mang
                     </label>
                     <input
                       type="text"
@@ -2027,14 +2302,14 @@ export default function FamilyHubPage() {
                     <button
                       type="button"
                       onClick={resetScheduleForm}
-                      className="btn-3d bg-slate-200 text-slate-900 px-4 py-2.5 text-sm"
+                      className="btn-3d bg-white text-slate-700 border-slate-300 px-4 py-2.5 text-sm"
                     >
                       Hủy
                     </button>
                   )}
                   <button
                     type="submit"
-                    className="btn-3d bg-blue-600 text-white px-6 py-2.5 text-sm"
+                    className="btn-3d bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 text-sm"
                   >
                     {editingScheduleId
                       ? "Cập Nhật Lịch Học & Đưa Đón"
@@ -2045,7 +2320,7 @@ export default function FamilyHubPage() {
             )}
 
             {/* Bộ lọc theo Bé & theo Thứ */}
-            <div className="card-3d p-5 bg-white space-y-4">
+            <div className="card-3d p-5 md:p-6 bg-white space-y-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap gap-2">
                   {["all", ...Array.from(new Set(schedules.map((s) => s.childName)))].map(
@@ -2056,11 +2331,21 @@ export default function FamilyHubPage() {
                         onClick={() => setScheduleChildFilter(name)}
                         className={`btn-3d px-3.5 py-2 text-xs md:text-sm ${
                           scheduleChildFilter === name
-                            ? "bg-blue-600 text-white"
-                            : "bg-slate-100 text-slate-900"
+                            ? "bg-blue-600 text-white border-blue-600"
+                            : "bg-slate-100 hover:bg-slate-200/80 text-slate-700 border-slate-200"
                         }`}
                       >
-                        {name === "all" ? "👨‍👩‍👧‍👦 Tất cả các con" : `🎒 ${name}`}
+                        {name === "all" ? (
+                          <>
+                            <Users className="w-4 h-4" aria-hidden="true" />
+                            <span>Tất cả các con</span>
+                          </>
+                        ) : (
+                          <>
+                            <GraduationCap className="w-4 h-4" aria-hidden="true" />
+                            <span>{name}</span>
+                          </>
+                        )}
                       </button>
                     )
                   )}
@@ -2072,8 +2357,8 @@ export default function FamilyHubPage() {
                     onClick={() => setScheduleDayFilter(0)}
                     className={`btn-3d px-3 py-1.5 text-xs ${
                       scheduleDayFilter === 0
-                        ? "bg-slate-950 text-amber-300"
-                        : "bg-slate-100 text-slate-900"
+                        ? "bg-slate-900 text-white border-slate-900"
+                        : "bg-slate-100 hover:bg-slate-200/80 text-slate-700 border-slate-200"
                     }`}
                   >
                     Cả tuần
@@ -2085,8 +2370,8 @@ export default function FamilyHubPage() {
                       onClick={() => setScheduleDayFilter(Number(dayNum))}
                       className={`btn-3d px-3 py-1.5 text-xs ${
                         scheduleDayFilter === Number(dayNum)
-                          ? "bg-slate-950 text-amber-300"
-                          : "bg-slate-100 text-slate-900"
+                          ? "bg-slate-900 text-white border-slate-900"
+                          : "bg-slate-100 hover:bg-slate-200/80 text-slate-700 border-slate-200"
                       }`}
                     >
                       {label}
@@ -2099,97 +2384,105 @@ export default function FamilyHubPage() {
                 {filteredSchedules.map((item) => {
                   const typeBadge =
                     item.scheduleType === "main"
-                      ? { label: "CHÍNH KHÓA", bg: "bg-sky-200" }
+                      ? { label: "Chính khóa", bg: "bg-sky-50 text-sky-800 border-sky-200" }
                       : item.scheduleType === "extra"
-                      ? { label: "HỌC THÊM", bg: "bg-amber-300" }
-                      : { label: "NGOẠI KHÓA / NĂNG KHIẾU", bg: "bg-emerald-300" };
+                      ? { label: "Học thêm", bg: "bg-amber-50 text-amber-900 border-amber-200" }
+                      : { label: "Ngoại khóa / Năng khiếu", bg: "bg-emerald-50 text-emerald-800 border-emerald-200" };
 
                   return (
                     <div
                       key={item.id}
-                      className="card-3d-sm p-4 md:p-5 bg-white flex flex-col justify-between gap-3"
+                      className="card-3d-sm p-4 md:p-5 bg-white flex flex-col justify-between gap-3.5"
                     >
                       <div>
-                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                          <div className="flex items-center gap-2">
-                            <span className="badge-3d bg-slate-950 text-white px-3 py-0.5 text-xs">
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="badge-3d bg-slate-900 text-white px-3 py-0.5 text-xs">
                               {DAY_NAMES[item.dayOfWeek]}
                             </span>
                             <span
-                              className={`badge-3d px-2.5 py-0.5 text-xs text-slate-950 ${typeBadge.bg}`}
+                              className={`badge-3d px-2.5 py-0.5 text-xs ${typeBadge.bg}`}
                             >
                               {typeBadge.label}
                             </span>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1">
                             <button
                               type="button"
                               onClick={() => startEditSchedule(item)}
-                              className="text-blue-600 hover:text-blue-800"
+                              aria-label={`Sửa lịch học ${item.subject}`}
+                              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
                               title="Sửa lịch học"
                             >
-                              <Pencil className="w-4 h-4" />
+                              <Pencil className="w-4 h-4" aria-hidden="true" />
                             </button>
                             <button
                               type="button"
                               onClick={() =>
                                 handleDeleteItem("schedules", item.id)
                               }
-                              className="text-rose-600 hover:text-rose-800"
+                              aria-label={`Xóa lịch học ${item.subject}`}
+                              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                               title="Xóa lịch học"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-4 h-4" aria-hidden="true" />
                             </button>
                           </div>
                         </div>
 
-                        <div className="text-xs font-black uppercase text-blue-700">
-                          🎒 {item.childName}
+                        <div className="text-xs font-bold uppercase text-blue-600 flex items-center gap-1">
+                          <GraduationCap className="w-3.5 h-3.5" aria-hidden="true" />
+                          <span>{item.childName}</span>
                         </div>
-                        <h3 className="text-lg font-black text-slate-950 mt-0.5">
+                        <h3 className="text-lg font-bold text-slate-900 mt-0.5">
                           {item.subject}
                         </h3>
-                        <div className="inline-flex items-center gap-1.5 mt-1 px-3 py-1 rounded-lg bg-amber-100 border-2 border-slate-950 font-black text-sm text-slate-950">
-                          <Clock className="w-4 h-4" />
-                          {item.startTime} — {item.endTime}
+                        <div className="inline-flex items-center gap-1.5 mt-1.5 px-3 py-1 rounded-lg bg-amber-50 border border-amber-200 font-bold text-xs text-amber-900 tabular-nums">
+                          <Clock className="w-3.5 h-3.5 text-amber-600" aria-hidden="true" />
+                          <span>
+                            {item.startTime} — {item.endTime}
+                          </span>
                         </div>
 
-                        <div className="mt-3 space-y-1 text-xs font-bold text-slate-800">
+                        <div className="mt-3 space-y-1.5 text-xs font-medium text-slate-700">
                           {item.location && (
                             <div className="flex items-center gap-1.5">
-                              <MapPin className="w-4 h-4 text-rose-600 shrink-0" />
+                              <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0" aria-hidden="true" />
                               <span>{item.location}</span>
                             </div>
                           )}
                           {item.teacherInfo && (
                             <div className="flex items-center gap-1.5">
-                              <Phone className="w-4 h-4 text-emerald-700 shrink-0" />
+                              <Phone className="w-3.5 h-3.5 text-emerald-600 shrink-0" aria-hidden="true" />
                               <span>GV: {item.teacherInfo}</span>
                             </div>
                           )}
                           {item.note && (
-                            <div className="bg-slate-100 p-2 rounded-lg border border-slate-300 mt-1">
-                              📌 {item.note}
+                            <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 mt-1.5 flex items-start gap-1.5">
+                              <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" aria-hidden="true" />
+                              <span>{item.note}</span>
                             </div>
                           )}
                         </div>
                       </div>
 
                       {/* Khối phân công Đưa - Đón nổi bật */}
-                      <div className="grid grid-cols-2 gap-3 pt-2 border-t-2 border-dashed border-slate-200">
-                        <div className="card-3d-sm bg-blue-100 p-2.5">
-                          <div className="text-[11px] font-black text-blue-900 flex items-center gap-1">
-                            <Car className="w-3.5 h-3.5" /> NGƯỜI ĐƯA ĐI
+                      <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-200/80">
+                        <div className="card-3d-sm bg-blue-50/70 border-blue-200/80 p-2.5">
+                          <div className="text-[11px] font-bold uppercase text-blue-800 flex items-center gap-1">
+                            <Car className="w-3.5 h-3.5 text-blue-600" aria-hidden="true" />
+                            <span>Người đưa đi</span>
                           </div>
-                          <div className="text-sm font-black text-slate-950 mt-0.5">
+                          <div className="text-sm font-bold text-slate-900 mt-0.5">
                             {item.dropoffName}
                           </div>
                         </div>
-                        <div className="card-3d-sm bg-rose-100 p-2.5">
-                          <div className="text-[11px] font-black text-rose-900 flex items-center gap-1">
-                            <Bike className="w-3.5 h-3.5" /> NGƯỜI ĐÓN VỀ
+                        <div className="card-3d-sm bg-rose-50/70 border-rose-200/80 p-2.5">
+                          <div className="text-[11px] font-bold uppercase text-rose-800 flex items-center gap-1">
+                            <Bike className="w-3.5 h-3.5 text-rose-600" aria-hidden="true" />
+                            <span>Người đón về</span>
                           </div>
-                          <div className="text-sm font-black text-slate-950 mt-0.5">
+                          <div className="text-sm font-bold text-slate-900 mt-0.5">
                             {item.pickupName}
                           </div>
                         </div>
@@ -2210,10 +2503,10 @@ export default function FamilyHubPage() {
             <div className="card-3d p-5 md:p-6 bg-white">
               <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
                 <div>
-                  <h2 className="text-xl font-black text-slate-950">
-                    LỊCH GIỖ & SỰ KIỆN RIÊNG CỦA GIA ĐÌNH (ÂM LỊCH & DƯƠNG LỊCH)
+                  <h2 className="text-lg md:text-xl font-bold text-slate-900">
+                    Lịch giỗ & Sự kiện riêng của gia đình (Âm lịch & Dương lịch)
                   </h2>
-                  <p className="text-xs md:text-sm font-bold text-slate-700">
+                  <p className="text-xs md:text-sm font-medium text-slate-600 mt-0.5">
                     Tự động quy đổi ngày Âm lịch sang ngày Dương lịch của năm hiện tại và đếm ngược
                   </p>
                 </div>
@@ -2227,35 +2520,45 @@ export default function FamilyHubPage() {
                       setShowEventForm(!showEventForm);
                     }
                   }}
-                  className="btn-3d bg-rose-500 hover:bg-rose-400 text-white px-4 py-2.5 text-sm"
+                  className="btn-3d bg-rose-600 hover:bg-rose-700 text-white px-4 py-2.5 text-sm"
                 >
-                  <Plus className="w-5 h-5" />
-                  Thêm Lịch Giỗ / Sự Kiện
+                  <Plus className="w-4 h-4" aria-hidden="true" />
+                  <span>Thêm Lịch Giỗ / Sự Kiện</span>
                 </button>
               </div>
 
               {showEventForm && (
                 <form
                   onSubmit={handleCreateEvent}
-                  className="card-3d-sm bg-rose-50 p-4 md:p-5 mb-6 space-y-4"
+                  className="card-3d-sm bg-rose-50/50 border-rose-200 p-4 md:p-5 mb-6 space-y-4"
                 >
                   <div className="flex items-center justify-between">
-                    <h3 className="font-black text-base text-slate-950">
-                      {editingEventId
-                        ? "✏️ CHỈNH SỬA NGÀY GIỖ HOẶC SỰ KIỆN GIA ĐÌNH"
-                        : "➕ THÊM NGÀY GIỖ HOẶC SỰ KIỆN GIA ĐÌNH"}
+                    <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                      {editingEventId ? (
+                        <>
+                          <Pencil className="w-4 h-4 text-rose-600" aria-hidden="true" />
+                          <span>Chỉnh sửa ngày giỗ hoặc sự kiện gia đình</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4 text-rose-600" aria-hidden="true" />
+                          <span>Thêm ngày giỗ hoặc sự kiện gia đình</span>
+                        </>
+                      )}
                     </h3>
                     <button
                       type="button"
                       onClick={resetEventForm}
+                      aria-label="Đóng biểu mẫu"
+                      className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-200/70"
                     >
-                      <X className="w-5 h-5" />
+                      <X className="w-5 h-5" aria-hidden="true" />
                     </button>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-xs font-black mb-1">
-                        TÊN NGÀY GIỖ / SỰ KIỆN *
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Tên ngày giỗ / sự kiện *
                       </label>
                       <input
                         type="text"
@@ -2267,8 +2570,8 @@ export default function FamilyHubPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-black mb-1">
-                        LOẠI SỰ KIỆN
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Loại sự kiện
                       </label>
                       <select
                         value={evType}
@@ -2284,15 +2587,15 @@ export default function FamilyHubPage() {
                         }
                         className="input-3d"
                       >
-                        <option value="ancestor">🕯️ Lịch Giỗ Gia Tiên</option>
-                        <option value="birthday">🎂 Sinh nhật Thành viên</option>
-                        <option value="anniversary">💝 Kỷ niệm Gia đình</option>
-                        <option value="holiday">🏮 Lễ Tết / Họp họ</option>
+                        <option value="ancestor">Lịch Giỗ Gia Tiên</option>
+                        <option value="birthday">Sinh nhật Thành viên</option>
+                        <option value="anniversary">Kỷ niệm Gia đình</option>
+                        <option value="holiday">Lễ Tết / Họp họ</option>
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-black mb-1">
-                        TÍNH THEO LỊCH NÀO? *
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Tính theo lịch nào? *
                       </label>
                       <select
                         value={evCalType}
@@ -2301,8 +2604,8 @@ export default function FamilyHubPage() {
                         }
                         className="input-3d"
                       >
-                        <option value="lunar">🌙 Theo ÂM LỊCH (Tự quy ra Dương)</option>
-                        <option value="solar">☀️ Theo DƯƠNG LỊCH</option>
+                        <option value="lunar">Theo Âm Lịch (Tự quy ra Dương)</option>
+                        <option value="solar">Theo Dương Lịch</option>
                       </select>
                     </div>
                   </div>
@@ -2310,8 +2613,8 @@ export default function FamilyHubPage() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-xs font-black mb-1">
-                          NGÀY (1-30/31) *
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                          Ngày (1-30/31) *
                         </label>
                         <input
                           type="number"
@@ -2319,12 +2622,12 @@ export default function FamilyHubPage() {
                           max={31}
                           value={evDay}
                           onChange={(e) => setEvDay(Number(e.target.value))}
-                          className="input-3d"
+                          className="input-3d tabular-nums"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-black mb-1">
-                          THÁNG (1-12) *
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                          Tháng (1-12) *
                         </label>
                         <input
                           type="number"
@@ -2332,13 +2635,13 @@ export default function FamilyHubPage() {
                           max={12}
                           value={evMonth}
                           onChange={(e) => setEvMonth(Number(e.target.value))}
-                          className="input-3d"
+                          className="input-3d tabular-nums"
                         />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-xs font-black mb-1">
-                        NHẮC TRƯỚC BAO NHIÊU NGÀY?
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Nhắc trước bao nhiêu ngày?
                       </label>
                       <input
                         type="number"
@@ -2346,12 +2649,12 @@ export default function FamilyHubPage() {
                         max={60}
                         value={evRemind}
                         onChange={(e) => setEvRemind(Number(e.target.value))}
-                        className="input-3d"
+                        className="input-3d tabular-nums"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-black mb-1">
-                        GHI CHÚ CHUẨN BỊ CỖ / LỄ VẬT
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Ghi chú chuẩn bị cỗ / lễ vật
                       </label>
                       <input
                         type="text"
@@ -2367,14 +2670,14 @@ export default function FamilyHubPage() {
                       <button
                         type="button"
                         onClick={resetEventForm}
-                        className="btn-3d bg-slate-200 text-slate-900 px-4 py-2.5 text-sm"
+                        className="btn-3d bg-white text-slate-700 border-slate-300 px-4 py-2.5 text-sm"
                       >
                         Hủy
                       </button>
                     )}
                     <button
                       type="submit"
-                      className="btn-3d bg-rose-500 text-white px-6 py-2.5 text-sm"
+                      className="btn-3d bg-rose-600 hover:bg-rose-700 text-white px-6 py-2.5 text-sm"
                     >
                       {editingEventId
                         ? "Cập Nhật Lịch Giỗ / Sự Kiện"
@@ -2390,84 +2693,108 @@ export default function FamilyHubPage() {
                   return (
                     <div
                       key={ev.id}
-                      className={`card-3d-sm p-5 flex flex-col justify-between gap-3 ${
-                        ev.isUpcomingSoon ? "bg-amber-50" : "bg-white"
+                      className={`card-3d-sm p-5 flex flex-col justify-between gap-3.5 ${
+                        ev.isUpcomingSoon
+                          ? "bg-amber-50/40 border-amber-200/90"
+                          : "bg-white"
                       }`}
                     >
                       <div>
-                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
                           <span
-                            className={`badge-3d px-3 py-0.5 text-xs ${
+                            className={`badge-3d px-3 py-0.5 text-xs tabular-nums ${
                               ev.calendarType === "lunar"
-                                ? "bg-amber-300 text-slate-950"
-                                : "bg-sky-300 text-slate-950"
+                                ? "bg-amber-100 text-amber-900 border-amber-200"
+                                : "bg-sky-100 text-sky-900 border-sky-200"
                             }`}
                           >
-                            {ev.calendarType === "lunar"
-                              ? `🌙 ÂM LỊCH: ${String(ev.day).padStart(
-                                  2,
-                                  "0"
-                                )}/${String(ev.month).padStart(2, "0")}`
-                              : `☀️ DƯƠNG LỊCH: ${String(ev.day).padStart(
-                                  2,
-                                  "0"
-                                )}/${String(ev.month).padStart(2, "0")}`}
+                            {ev.calendarType === "lunar" ? (
+                              <>
+                                <Moon className="w-3.5 h-3.5 text-amber-700" aria-hidden="true" />
+                                <span>
+                                  Âm lịch: {String(ev.day).padStart(2, "0")}/
+                                  {String(ev.month).padStart(2, "0")}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <Sun className="w-3.5 h-3.5 text-sky-700" aria-hidden="true" />
+                                <span>
+                                  Dương lịch: {String(ev.day).padStart(2, "0")}/
+                                  {String(ev.month).padStart(2, "0")}
+                                </span>
+                              </>
+                            )}
                           </span>
 
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5">
                             <span
-                              className={`badge-3d px-3 py-1 text-xs ${
+                              className={`badge-3d px-3 py-1 text-xs tabular-nums ${
                                 ev.daysUntil === 0
-                                  ? "bg-rose-600 text-white"
+                                  ? "bg-rose-600 text-white border-rose-600"
                                   : ev.daysUntil <= 14
-                                  ? "bg-rose-500 text-white"
-                                  : "bg-emerald-300 text-slate-950"
+                                  ? "bg-rose-50 text-rose-700 border-rose-200"
+                                  : "bg-emerald-50 text-emerald-800 border-emerald-200"
                               }`}
                             >
-                              {ev.daysUntil === 0
-                                ? "🔥 HÔM NAY!"
-                                : `⏰ Còn ${ev.daysUntil} ngày nữa`}
+                              <Clock className="w-3.5 h-3.5" aria-hidden="true" />
+                              <span>
+                                {ev.daysUntil === 0
+                                  ? "Hôm nay!"
+                                  : `Còn ${ev.daysUntil} ngày nữa`}
+                              </span>
                             </span>
                             <button
                               type="button"
                               onClick={() => startEditEvent(ev)}
-                              className="text-blue-700 hover:text-blue-900"
+                              aria-label={`Sửa sự kiện ${ev.title}`}
+                              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
                               title="Sửa sự kiện"
                             >
-                              <Pencil className="w-4 h-4" />
+                              <Pencil className="w-4 h-4" aria-hidden="true" />
                             </button>
                             <button
                               type="button"
                               onClick={() => handleDeleteItem("events", ev.id)}
-                              className="text-rose-700 hover:text-rose-900"
+                              aria-label={`Xóa sự kiện ${ev.title}`}
+                              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                               title="Xóa sự kiện"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-4 h-4" aria-hidden="true" />
                             </button>
                           </div>
                         </div>
 
-                        <h3 className="text-lg font-black text-slate-950 flex items-center gap-2">
-                          <span>{isAncestor ? "🕯️" : "🎉"}</span>
-                          {ev.title}
+                        <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                          {isAncestor ? (
+                            <Flame className="w-5 h-5 text-amber-600 shrink-0" aria-hidden="true" />
+                          ) : (
+                            <Sparkles className="w-5 h-5 text-rose-500 shrink-0" aria-hidden="true" />
+                          )}
+                          <span>{ev.title}</span>
                         </h3>
 
-                        <div className="mt-2 p-3 rounded-xl bg-white border-2 border-slate-950 space-y-1 text-xs md:text-sm font-extrabold">
-                          <div className="text-blue-800">
-                            📅 Ngày Dương lịch năm nay:{" "}
-                            <span className="font-black underline">
-                              {ev.solarDateStr}
+                        <div className="mt-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1 text-xs md:text-sm font-semibold tabular-nums">
+                          <div className="text-blue-700 flex items-center gap-1.5">
+                            <Calendar className="w-4 h-4 text-blue-600 shrink-0" aria-hidden="true" />
+                            <span>
+                              Ngày Dương lịch năm nay:{" "}
+                              <strong className="font-extrabold underline decoration-blue-300">
+                                {ev.solarDateStr}
+                              </strong>
                             </span>
                           </div>
-                          <div className="text-slate-700">
-                            🌙 Đối chiếu Âm lịch: {ev.lunarDisplay}
+                          <div className="text-slate-600 flex items-center gap-1.5">
+                            <Moon className="w-4 h-4 text-amber-600 shrink-0" aria-hidden="true" />
+                            <span>Đối chiếu Âm lịch: {ev.lunarDisplay}</span>
                           </div>
                         </div>
 
                         {ev.note && (
-                          <p className="text-xs font-bold text-slate-800 mt-2 bg-amber-100/80 p-2.5 rounded-lg border border-amber-400">
-                            📝 Chuẩn bị: {ev.note}
-                          </p>
+                          <div className="text-xs font-medium text-amber-950 mt-2.5 bg-amber-50/80 p-2.5 rounded-xl border border-amber-200/80 flex items-start gap-1.5">
+                            <FileText className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+                            <span>Chuẩn bị: {ev.note}</span>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -2485,37 +2812,42 @@ export default function FamilyHubPage() {
           <div className="space-y-6">
             {/* Chuyển đổi giữa Kho Tài khoản & Hồ sơ Giấy tờ */}
             <div className="card-3d p-4 bg-white flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-2.5">
                 <button
                   type="button"
                   onClick={() => setVaultSubTab("accounts")}
-                  className={`btn-3d px-5 py-3 text-sm ${
+                  className={`btn-3d px-4 py-2.5 text-sm ${
                     vaultSubTab === "accounts"
-                      ? "bg-violet-500 text-white"
-                      : "bg-slate-100 text-slate-900"
+                      ? "bg-blue-600 text-white border-blue-600"
+                      : "bg-slate-100 hover:bg-slate-200/80 text-slate-700 border-slate-200"
                   }`}
                 >
-                  <KeyRound className="w-5 h-5" />
-                  Kho Tài Khoản (Lớp học, Cuộc thi...) ({accounts.length})
+                  <KeyRound className="w-4 h-4" aria-hidden="true" />
+                  <span>
+                    Kho Tài Khoản (Lớp học, Cuộc thi...) ({accounts.length})
+                  </span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setVaultSubTab("documents")}
-                  className={`btn-3d px-5 py-3 text-sm ${
+                  className={`btn-3d px-4 py-2.5 text-sm ${
                     vaultSubTab === "documents"
-                      ? "bg-amber-400 text-slate-950"
-                      : "bg-slate-100 text-slate-900"
+                      ? "bg-blue-600 text-white border-blue-600"
+                      : "bg-slate-100 hover:bg-slate-200/80 text-slate-700 border-slate-200"
                   }`}
                 >
-                  <FileBadge className="w-5 h-5" />
-                  Giấy Tờ Cá Nhân (Khai sinh, BHYT, CCCD...) ({documents.length})
+                  <FileBadge className="w-4 h-4" aria-hidden="true" />
+                  <span>
+                    Giấy Tờ Cá Nhân (Khai sinh, BHYT, CCCD...) ({documents.length})
+                  </span>
                 </button>
               </div>
 
               <div className="relative w-full sm:w-72">
-                <Search className="w-4 h-4 absolute left-3 top-3.5 text-slate-500" />
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true" />
                 <input
                   type="text"
+                  aria-label="Tìm nhanh tài khoản hoặc mã thẻ"
                   placeholder="Tìm nhanh tài khoản, mã thẻ..."
                   value={vaultSearch}
                   onChange={(e) => setVaultSearch(e.target.value)}
@@ -2529,10 +2861,10 @@ export default function FamilyHubPage() {
               <div className="card-3d p-5 md:p-6 bg-white">
                 <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
                   <div>
-                    <h2 className="text-xl font-black text-slate-950">
-                      KHO TÀI KHOẢN DÙNG CHUNG TRONG GIA ĐÌNH
+                    <h2 className="text-lg md:text-xl font-bold text-slate-900">
+                      Kho tài khoản dùng chung trong gia đình
                     </h2>
-                    <p className="text-xs md:text-sm font-bold text-slate-700">
+                    <p className="text-xs md:text-sm font-medium text-slate-600 mt-0.5">
                       Lưu trữ User/Password các lớp học, cuộc thi (Violympic, IOE, Trạng Nguyên), Wifi...
                     </p>
                   </div>
@@ -2546,58 +2878,72 @@ export default function FamilyHubPage() {
                         setShowAccountForm(!showAccountForm);
                       }
                     }}
-                    className="btn-3d bg-violet-500 hover:bg-violet-400 text-white px-4 py-2.5 text-sm"
+                    className="btn-3d bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-sm"
                   >
-                    <Plus className="w-5 h-5" />
-                    Thêm Tài Khoản Mới
+                    <Plus className="w-4 h-4" aria-hidden="true" />
+                    <span>Thêm Tài Khoản Mới</span>
                   </button>
                 </div>
 
                 {/* Bộ lọc danh mục tài khoản */}
                 <div className="flex flex-wrap gap-2 mb-5">
                   {[
-                    { id: "all", label: "Tất cả" },
-                    { id: "contest", label: "🏆 Cuộc thi (Violympic, IOE...)" },
-                    { id: "class", label: "🏫 Lớp học & Sổ liên lạc" },
-                    { id: "utility", label: "⚡ Tiện ích nhà (Wifi, Điện...)" },
-                  ].map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => setAccountCategoryFilter(c.id)}
-                      className={`btn-3d px-3.5 py-2 text-xs ${
-                        accountCategoryFilter === c.id
-                          ? "bg-slate-950 text-amber-300"
-                          : "bg-slate-100 text-slate-900"
-                      }`}
-                    >
-                      {c.label}
-                    </button>
-                  ))}
+                    { id: "all", label: "Tất cả", icon: null },
+                    { id: "contest", label: "Cuộc thi (Violympic, IOE...)", icon: Trophy },
+                    { id: "class", label: "Lớp học & Sổ liên lạc", icon: School },
+                    { id: "utility", label: "Tiện ích nhà (Wifi, Điện...)", icon: Zap },
+                  ].map((c) => {
+                    const CatIcon = c.icon;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setAccountCategoryFilter(c.id)}
+                        className={`btn-3d px-3.5 py-2 text-xs ${
+                          accountCategoryFilter === c.id
+                            ? "bg-slate-900 text-white border-slate-900"
+                            : "bg-slate-100 hover:bg-slate-200/80 text-slate-700 border-slate-200"
+                        }`}
+                      >
+                        {CatIcon && <CatIcon className="w-3.5 h-3.5" aria-hidden="true" />}
+                        <span>{c.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {showAccountForm && (
                   <form
                     onSubmit={handleCreateAccount}
-                    className="card-3d-sm bg-violet-50 p-4 md:p-5 mb-6 space-y-4"
+                    className="card-3d-sm bg-slate-50 border-blue-200 p-4 md:p-5 mb-6 space-y-4"
                   >
                     <div className="flex items-center justify-between">
-                      <h3 className="font-black text-base text-slate-950">
-                        {editingAccountId
-                          ? "✏️ CHỈNH SỬA TÀI KHOẢN DÙNG CHUNG"
-                          : "➕ THÊM TÀI KHOẢN LỚP HỌC / CUỘC THI / TIỆN ÍCH"}
+                      <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                        {editingAccountId ? (
+                          <>
+                            <Pencil className="w-4 h-4 text-blue-600" aria-hidden="true" />
+                            <span>Chỉnh sửa tài khoản dùng chung</span>
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="w-4 h-4 text-blue-600" aria-hidden="true" />
+                            <span>Thêm tài khoản lớp học / cuộc thi / tiện ích</span>
+                          </>
+                        )}
                       </h3>
                       <button
                         type="button"
                         onClick={resetAccountForm}
+                        aria-label="Đóng biểu mẫu"
+                        className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-200/70"
                       >
-                        <X className="w-5 h-5" />
+                        <X className="w-5 h-5" aria-hidden="true" />
                       </button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
-                        <label className="block text-xs font-black mb-1">
-                          TÊN TÀI KHOẢN / CUỘC THI *
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                          Tên tài khoản / cuộc thi *
                         </label>
                         <input
                           type="text"
@@ -2609,8 +2955,8 @@ export default function FamilyHubPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-black mb-1">
-                          PHÂN LOẠI
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                          Phân loại
                         </label>
                         <select
                           value={accCategory}
@@ -2626,15 +2972,15 @@ export default function FamilyHubPage() {
                           }
                           className="input-3d"
                         >
-                          <option value="contest">🏆 Tài khoản Cuộc thi</option>
-                          <option value="class">🏫 Tài khoản Lớp học</option>
-                          <option value="utility">⚡ Tiện ích Gia đình</option>
-                          <option value="other">📌 Khác</option>
+                          <option value="contest">Tài khoản Cuộc thi</option>
+                          <option value="class">Tài khoản Lớp học</option>
+                          <option value="utility">Tiện ích Gia đình</option>
+                          <option value="other">Khác</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-black mb-1">
-                          CỦA THÀNH VIÊN NÀO?
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                          Của thành viên nào?
                         </label>
                         <input
                           type="text"
@@ -2648,8 +2994,8 @@ export default function FamilyHubPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
-                        <label className="block text-xs font-black mb-1">
-                          TÊN ĐĂNG NHẬP (USERNAME / ID) *
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                          Tên đăng nhập (Username / ID) *
                         </label>
                         <input
                           type="text"
@@ -2661,8 +3007,8 @@ export default function FamilyHubPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-black mb-1">
-                          MẬT KHẨU (PASSWORD) *
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                          Mật khẩu (Password) *
                         </label>
                         <input
                           type="text"
@@ -2674,8 +3020,8 @@ export default function FamilyHubPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-black mb-1">
-                          TRANG WEB / LINK ĐĂNG NHẬP
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                          Trang web / Link đăng nhập
                         </label>
                         <input
                           type="text"
@@ -2688,8 +3034,8 @@ export default function FamilyHubPage() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-black mb-1">
-                        GHI CHÚ (MÃ HỌC SINH, SBD, SĐT ĐĂNG KÝ...)
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Ghi chú (Mã học sinh, SBD, SĐT đăng ký...)
                       </label>
                       <input
                         type="text"
@@ -2704,14 +3050,14 @@ export default function FamilyHubPage() {
                         <button
                           type="button"
                           onClick={resetAccountForm}
-                          className="btn-3d bg-slate-200 text-slate-900 px-5 py-2.5 text-sm"
+                          className="btn-3d bg-white text-slate-700 border-slate-300 px-5 py-2.5 text-sm"
                         >
                           Hủy
                         </button>
                       )}
                       <button
                         type="submit"
-                        className="btn-3d bg-violet-600 text-white px-6 py-2.5 text-sm"
+                        className="btn-3d bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 text-sm"
                       >
                         {editingAccountId
                           ? "Lưu Thay Đổi"
@@ -2727,52 +3073,56 @@ export default function FamilyHubPage() {
                     return (
                       <div
                         key={acc.id}
-                        className="card-3d-sm p-4 md:p-5 bg-white flex flex-col justify-between gap-3"
+                        className="card-3d-sm p-4 md:p-5 bg-white flex flex-col justify-between gap-3.5"
                       >
                         <div>
-                          <div className="flex items-center justify-between gap-2 mb-2">
-                            <span className="badge-3d bg-violet-200 text-slate-950 px-3 py-0.5 text-xs">
-                              👤 {acc.ownerName}
+                          <div className="flex items-center justify-between gap-2 mb-2.5">
+                            <span className="badge-3d bg-blue-50 text-blue-800 border-blue-200 px-3 py-0.5 text-xs">
+                              <User className="w-3.5 h-3.5 text-blue-600" aria-hidden="true" />
+                              <span>{acc.ownerName}</span>
                             </span>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1">
                               <button
                                 type="button"
                                 onClick={() => startEditAccount(acc)}
-                                className="text-blue-600 hover:text-blue-800"
+                                aria-label={`Sửa tài khoản ${acc.title}`}
+                                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
                                 title="Sửa tài khoản"
                               >
-                                <Pencil className="w-4 h-4" />
+                                <Pencil className="w-4 h-4" aria-hidden="true" />
                               </button>
                               <button
                                 type="button"
                                 onClick={() =>
                                   handleDeleteItem("accounts", acc.id)
                                 }
-                                className="text-rose-600 hover:text-rose-800"
+                                aria-label={`Xóa tài khoản ${acc.title}`}
+                                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                                 title="Xóa tài khoản"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="w-4 h-4" aria-hidden="true" />
                               </button>
                             </div>
                           </div>
 
-                          <h3 className="text-lg font-black text-slate-950">
+                          <h3 className="text-lg font-bold text-slate-900">
                             {acc.title}
                           </h3>
                           {acc.platformUrl && (
-                            <div className="text-xs font-bold text-blue-700 truncate mt-0.5">
-                              🔗 {acc.platformUrl}
+                            <div className="text-xs font-medium text-blue-600 truncate mt-0.5 flex items-center gap-1">
+                              <Link2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                              <span className="truncate">{acc.platformUrl}</span>
                             </div>
                           )}
 
                           {/* Khối Copy nhanh Username & Password */}
                           <div className="mt-3 space-y-2">
-                            <div className="flex items-center justify-between bg-slate-100 border-2 border-slate-950 rounded-xl px-3 py-2">
+                            <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5">
                               <div>
-                                <div className="text-[10px] font-black uppercase text-slate-600">
-                                  TÊN ĐĂNG NHẬP / USER
+                                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                  Tên đăng nhập / User
                                 </div>
-                                <div className="font-black text-sm text-slate-950 select-all">
+                                <div className="font-bold text-sm text-slate-900 select-all">
                                   {acc.accountUsername}
                                 </div>
                               </div>
@@ -2784,28 +3134,28 @@ export default function FamilyHubPage() {
                                     `u-${acc.id}`
                                   )
                                 }
-                                className="btn-3d bg-white px-3 py-1.5 text-xs"
+                                className="btn-3d bg-white hover:bg-slate-50 text-slate-700 border-slate-200 px-3 py-1.5 text-xs"
                               >
                                 {copiedKey === `u-${acc.id}` ? (
                                   <>
-                                    <Check className="w-3.5 h-3.5 text-emerald-600" />
-                                    Đã chép
+                                    <Check className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
+                                    <span>Đã chép</span>
                                   </>
                                 ) : (
                                   <>
-                                    <Copy className="w-3.5 h-3.5" />
-                                    Chép
+                                    <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+                                    <span>Chép</span>
                                   </>
                                 )}
                               </button>
                             </div>
 
-                            <div className="flex items-center justify-between bg-amber-100 border-2 border-slate-950 rounded-xl px-3 py-2">
+                            <div className="flex items-center justify-between bg-amber-50/70 border border-amber-200/80 rounded-xl px-3.5 py-2.5">
                               <div>
-                                <div className="text-[10px] font-black uppercase text-slate-700">
-                                  MẬT KHẨU / PASSWORD
+                                <div className="text-[10px] font-bold uppercase tracking-wider text-amber-800">
+                                  Mật khẩu / Password
                                 </div>
-                                <div className="font-black text-sm text-slate-950 select-all">
+                                <div className="font-bold text-sm text-slate-900 select-all tabular-nums">
                                   {showPass
                                     ? acc.accountPassword
                                     : "••••••••••"}
@@ -2814,19 +3164,21 @@ export default function FamilyHubPage() {
                               <div className="flex items-center gap-1.5">
                                 <button
                                   type="button"
+                                  aria-label={showPass ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                                  aria-pressed={showPass}
                                   onClick={() =>
                                     setVisiblePasswords((p) => ({
                                       ...p,
                                       [acc.id]: !p[acc.id],
                                     }))
                                   }
-                                  className="btn-3d bg-white px-2.5 py-1.5 text-xs"
+                                  className="btn-3d bg-white hover:bg-slate-50 text-slate-700 border-slate-200 px-2.5 py-1.5 text-xs"
                                   title="Hiện/Ẩn mật khẩu"
                                 >
                                   {showPass ? (
-                                    <EyeOff className="w-3.5 h-3.5" />
+                                    <EyeOff className="w-3.5 h-3.5" aria-hidden="true" />
                                   ) : (
-                                    <Eye className="w-3.5 h-3.5" />
+                                    <Eye className="w-3.5 h-3.5" aria-hidden="true" />
                                   )}
                                 </button>
                                 <button
@@ -2837,17 +3189,17 @@ export default function FamilyHubPage() {
                                       `p-${acc.id}`
                                     )
                                   }
-                                  className="btn-3d bg-white px-3 py-1.5 text-xs"
+                                  className="btn-3d bg-white hover:bg-slate-50 text-slate-700 border-slate-200 px-3 py-1.5 text-xs"
                                 >
                                   {copiedKey === `p-${acc.id}` ? (
                                     <>
-                                      <Check className="w-3.5 h-3.5 text-emerald-600" />
-                                      Đã chép
+                                      <Check className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
+                                      <span>Đã chép</span>
                                     </>
                                   ) : (
                                     <>
-                                      <Copy className="w-3.5 h-3.5" />
-                                      Chép
+                                      <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+                                      <span>Chép</span>
                                     </>
                                   )}
                                 </button>
@@ -2856,9 +3208,10 @@ export default function FamilyHubPage() {
                           </div>
 
                           {acc.note && (
-                            <p className="text-xs font-bold text-slate-700 mt-2 bg-slate-50 p-2 rounded-lg border border-slate-300">
-                              📌 {acc.note}
-                            </p>
+                            <div className="text-xs font-medium text-slate-600 mt-2.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 flex items-start gap-1.5">
+                              <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" aria-hidden="true" />
+                              <span>{acc.note}</span>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -2873,10 +3226,10 @@ export default function FamilyHubPage() {
               <div className="card-3d p-5 md:p-6 bg-white">
                 <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
                   <div>
-                    <h2 className="text-xl font-black text-slate-950">
-                      HỒ SƠ GIẤY TỜ CÁ NHÂN CỦA CÁC THÀNH VIÊN
+                    <h2 className="text-lg md:text-xl font-bold text-slate-900">
+                      Hồ sơ giấy tờ cá nhân của các thành viên
                     </h2>
-                    <p className="text-xs md:text-sm font-bold text-slate-700">
+                    <p className="text-xs md:text-sm font-medium text-slate-600 mt-0.5">
                       Tra cứu nhanh Giấy khai sinh, Mã thẻ BHYT, CCCD, Hộ chiếu kèm ảnh chụp
                     </p>
                   </div>
@@ -2890,10 +3243,10 @@ export default function FamilyHubPage() {
                         setShowDocForm(!showDocForm);
                       }
                     }}
-                    className="btn-3d bg-amber-400 hover:bg-amber-300 text-slate-950 px-4 py-2.5 text-sm"
+                    className="btn-3d bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-sm"
                   >
-                    <Plus className="w-5 h-5" />
-                    Thêm Giấy Tờ Cá Nhân
+                    <Plus className="w-4 h-4" aria-hidden="true" />
+                    <span>Thêm Giấy Tờ Cá Nhân</span>
                   </button>
                 </div>
 
@@ -2909,11 +3262,18 @@ export default function FamilyHubPage() {
                       onClick={() => setDocHolderFilter(holder)}
                       className={`btn-3d px-3.5 py-2 text-xs ${
                         docHolderFilter === holder
-                          ? "bg-slate-950 text-amber-300"
-                          : "bg-slate-100 text-slate-900"
+                          ? "bg-slate-900 text-white border-slate-900"
+                          : "bg-slate-100 hover:bg-slate-200/80 text-slate-700 border-slate-200"
                       }`}
                     >
-                      {holder === "all" ? "Tất cả thành viên" : `👤 ${holder}`}
+                      {holder === "all" ? (
+                        <span>Tất cả thành viên</span>
+                      ) : (
+                        <>
+                          <User className="w-3.5 h-3.5" aria-hidden="true" />
+                          <span>{holder}</span>
+                        </>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -2921,25 +3281,35 @@ export default function FamilyHubPage() {
                 {showDocForm && (
                   <form
                     onSubmit={handleCreateDocument}
-                    className="card-3d-sm bg-amber-50 p-4 md:p-5 mb-6 space-y-4"
+                    className="card-3d-sm bg-slate-50 border-blue-200 p-4 md:p-5 mb-6 space-y-4"
                   >
                     <div className="flex items-center justify-between">
-                      <h3 className="font-black text-base text-slate-950">
-                        {editingDocId
-                          ? "✏️ CHỈNH SỬA HỒ SƠ GIẤY TỜ CÁ NHÂN"
-                          : "➕ THÊM GIẤY TỜ CÁ NHÂN MỚI (CÓ THỂ ĐÍNH KÈM ẢNH CHỤP)"}
+                      <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                        {editingDocId ? (
+                          <>
+                            <Pencil className="w-4 h-4 text-blue-600" aria-hidden="true" />
+                            <span>Chỉnh sửa hồ sơ giấy tờ cá nhân</span>
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="w-4 h-4 text-blue-600" aria-hidden="true" />
+                            <span>Thêm giấy tờ cá nhân mới (có thể đính kèm ảnh chụp)</span>
+                          </>
+                        )}
                       </h3>
                       <button
                         type="button"
                         onClick={resetDocumentForm}
+                        aria-label="Đóng biểu mẫu"
+                        className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-200/70"
                       >
-                        <X className="w-5 h-5" />
+                        <X className="w-5 h-5" aria-hidden="true" />
                       </button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
-                        <label className="block text-xs font-black mb-1">
-                          TÊN GIẤY TỜ *
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                          Tên giấy tờ *
                         </label>
                         <input
                           type="text"
@@ -2951,8 +3321,8 @@ export default function FamilyHubPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-black mb-1">
-                          LOẠI GIẤY TỜ
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                          Loại giấy tờ
                         </label>
                         <select
                           value={docType}
@@ -2969,17 +3339,17 @@ export default function FamilyHubPage() {
                           }
                           className="input-3d"
                         >
-                          <option value="birth_cert">👶 Giấy khai sinh</option>
-                          <option value="health_ins">🏥 Thẻ Bảo hiểm Y tế</option>
-                          <option value="id_card">🪪 Căn cước công dân / Định danh</option>
-                          <option value="passport">✈️ Hộ chiếu (Passport)</option>
-                          <option value="school">🎓 Hồ sơ học bạ / Chứng chỉ</option>
-                          <option value="other">📁 Giấy tờ khác</option>
+                          <option value="birth_cert">Giấy khai sinh</option>
+                          <option value="health_ins">Thẻ Bảo hiểm Y tế</option>
+                          <option value="id_card">Căn cước công dân / Định danh</option>
+                          <option value="passport">Hộ chiếu (Passport)</option>
+                          <option value="school">Hồ sơ học bạ / Chứng chỉ</option>
+                          <option value="other">Giấy tờ khác</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-black mb-1">
-                          CỦA THÀNH VIÊN NÀO? *
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                          Của thành viên nào? *
                         </label>
                         <input
                           type="text"
@@ -2994,32 +3364,32 @@ export default function FamilyHubPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       <div>
-                        <label className="block text-xs font-black mb-1">
-                          SỐ GIẤY TỜ / MÃ SỐ THẺ (TÙY CHỌN)
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                          Số giấy tờ / Mã số thẻ (Tùy chọn)
                         </label>
                         <input
                           type="text"
                           placeholder="VD: HS4797938291... (Có thể bỏ trống)"
                           value={docNumber}
                           onChange={(e) => setDocNumber(e.target.value)}
-                          className="input-3d"
+                          className="input-3d tabular-nums"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-black mb-1">
-                          NGÀY CẤP
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                          Ngày cấp
                         </label>
                         <input
                           type="text"
                           placeholder="VD: 15/05/2016"
                           value={docIssueDate}
                           onChange={(e) => setDocIssueDate(e.target.value)}
-                          className="input-3d"
+                          className="input-3d tabular-nums"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-black mb-1">
-                          HẠN SỬ DỤNG (NẾU CÓ)
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                          Hạn sử dụng (nếu có)
                         </label>
                         <input
                           type="text"
@@ -3030,8 +3400,8 @@ export default function FamilyHubPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-black mb-1">
-                          NƠI CẤP / NƠI ĐK KHÁM CHỮA BỆNH
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                          Nơi cấp / Nơi ĐK khám chữa bệnh
                         </label>
                         <input
                           type="text"
@@ -3045,8 +3415,9 @@ export default function FamilyHubPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
-                        <label className="block text-xs font-black mb-1">
-                          📷 ẢNH MẶT TRƯỚC (HỖ TRỢ JPG, PNG, .HEIC)
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center gap-1">
+                          <Camera className="w-3.5 h-3.5 text-blue-600" aria-hidden="true" />
+                          <span>Ảnh mặt trước (JPG, PNG, .HEIC)</span>
                         </label>
                         <input
                           type="file"
@@ -3077,12 +3448,12 @@ export default function FamilyHubPage() {
                             <img
                               src={docFrontImg}
                               alt="Xem trước mặt trước"
-                              className="h-24 w-auto rounded-lg border-2 border-slate-950 object-cover"
+                              className="h-24 w-auto rounded-xl border border-slate-200 object-cover shadow-xs"
                             />
                             <button
                               type="button"
                               onClick={() => setDocFrontImg("")}
-                              className="badge-3d bg-rose-500 text-white px-2 py-0.5 text-[10px] mt-1"
+                              className="badge-3d bg-rose-600 text-white px-2.5 py-0.5 text-[10px] mt-1 cursor-pointer"
                             >
                               Xóa ảnh mặt trước
                             </button>
@@ -3090,8 +3461,9 @@ export default function FamilyHubPage() {
                         )}
                       </div>
                       <div>
-                        <label className="block text-xs font-black mb-1">
-                          📷 ẢNH MẶT SAU (HỖ TRỢ JPG, PNG, .HEIC)
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center gap-1">
+                          <Camera className="w-3.5 h-3.5 text-blue-600" aria-hidden="true" />
+                          <span>Ảnh mặt sau (JPG, PNG, .HEIC)</span>
                         </label>
                         <input
                           type="file"
@@ -3122,12 +3494,12 @@ export default function FamilyHubPage() {
                             <img
                               src={docBackImg}
                               alt="Xem trước mặt sau"
-                              className="h-24 w-auto rounded-lg border-2 border-slate-950 object-cover"
+                              className="h-24 w-auto rounded-xl border border-slate-200 object-cover shadow-xs"
                             />
                             <button
                               type="button"
                               onClick={() => setDocBackImg("")}
-                              className="badge-3d bg-rose-500 text-white px-2 py-0.5 text-[10px] mt-1"
+                              className="badge-3d bg-rose-600 text-white px-2.5 py-0.5 text-[10px] mt-1 cursor-pointer"
                             >
                               Xóa ảnh mặt sau
                             </button>
@@ -3135,8 +3507,8 @@ export default function FamilyHubPage() {
                         )}
                       </div>
                       <div>
-                        <label className="block text-xs font-black mb-1">
-                          GHI CHÚ VỊ TRÍ CẤT GIỮ BẢN GỐC
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                          Ghi chú vị trí cất giữ bản gốc
                         </label>
                         <input
                           type="text"
@@ -3149,14 +3521,21 @@ export default function FamilyHubPage() {
                     </div>
 
                     {docImgLoading && (
-                      <div className="card-3d-sm bg-sky-100 p-3 text-xs font-black text-slate-900">
-                        ⏳ Đang chuyển đổi & nén ảnh (hỗ trợ cả định dạng .HEIC)... Vui lòng đợi trong giây lát!
+                      <div className="card-3d-sm bg-sky-50 border-sky-200 p-3 text-xs font-semibold text-sky-900 flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-sky-600 shrink-0" aria-hidden="true" />
+                        <span>
+                          Đang chuyển đổi & nén ảnh (hỗ trợ cả định dạng .HEIC)... Vui lòng đợi trong giây lát!
+                        </span>
                       </div>
                     )}
 
                     {docFormError && (
-                      <div className="card-3d-sm bg-rose-100 p-3 text-xs font-black text-rose-900">
-                        ⚠️ {docFormError}
+                      <div
+                        role="alert"
+                        className="card-3d-sm bg-rose-50 border-rose-200 p-3 text-xs font-semibold text-rose-800 flex items-center gap-2"
+                      >
+                        <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" aria-hidden="true" />
+                        <span>{docFormError}</span>
                       </div>
                     )}
 
@@ -3165,7 +3544,7 @@ export default function FamilyHubPage() {
                         <button
                           type="button"
                           onClick={resetDocumentForm}
-                          className="btn-3d bg-slate-200 text-slate-900 px-5 py-2.5 text-sm"
+                          className="btn-3d bg-white text-slate-700 border-slate-300 px-5 py-2.5 text-sm"
                         >
                           Hủy
                         </button>
@@ -3173,7 +3552,7 @@ export default function FamilyHubPage() {
                       <button
                         type="submit"
                         disabled={docImgLoading}
-                        className="btn-3d bg-blue-600 text-white px-6 py-2.5 text-sm disabled:opacity-50"
+                        className="btn-3d bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 text-sm disabled:opacity-50"
                       >
                         {docImgLoading
                           ? "Đang xử lý ảnh..."
@@ -3189,45 +3568,48 @@ export default function FamilyHubPage() {
                   {filteredDocuments.map((doc) => (
                     <div
                       key={doc.id}
-                      className="card-3d-sm p-4 md:p-5 bg-white flex flex-col justify-between gap-3"
+                      className="card-3d-sm p-4 md:p-5 bg-white flex flex-col justify-between gap-3.5"
                     >
                       <div>
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                          <span className="badge-3d bg-amber-300 text-slate-950 px-3 py-0.5 text-xs">
-                            👤 {doc.holderName}
+                        <div className="flex items-center justify-between gap-2 mb-2.5">
+                          <span className="badge-3d bg-amber-50 text-amber-900 border-amber-200 px-3 py-0.5 text-xs">
+                            <User className="w-3.5 h-3.5 text-amber-600" aria-hidden="true" />
+                            <span>{doc.holderName}</span>
                           </span>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1">
                             <button
                               type="button"
                               onClick={() => startEditDocument(doc)}
-                              className="text-blue-600 hover:text-blue-800"
+                              aria-label={`Sửa giấy tờ ${doc.title}`}
+                              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
                               title="Sửa giấy tờ"
                             >
-                              <Pencil className="w-4 h-4" />
+                              <Pencil className="w-4 h-4" aria-hidden="true" />
                             </button>
                             <button
                               type="button"
                               onClick={() =>
                                 handleDeleteItem("documents", doc.id)
                               }
-                              className="text-rose-600 hover:text-rose-800"
+                              aria-label={`Xóa giấy tờ ${doc.title}`}
+                              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                               title="Xóa giấy tờ"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-4 h-4" aria-hidden="true" />
                             </button>
                           </div>
                         </div>
 
-                        <h3 className="text-lg font-black text-slate-950">
+                        <h3 className="text-lg font-bold text-slate-900">
                           {doc.title}
                         </h3>
 
-                        <div className="mt-2 flex items-center justify-between bg-slate-100 border-2 border-slate-950 rounded-xl px-3 py-2">
+                        <div className="mt-2.5 flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5">
                           <div>
-                            <div className="text-[10px] font-black uppercase text-slate-600">
-                              SỐ GIẤY TỜ / MÃ SỐ THẺ
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                              Số giấy tờ / Mã số thẻ
                             </div>
-                            <div className="font-black text-base text-blue-800 select-all">
+                            <div className="font-bold text-base text-blue-700 select-all tabular-nums">
                               {doc.docNumber || "Chưa cập nhật"}
                             </div>
                           </div>
@@ -3237,35 +3619,43 @@ export default function FamilyHubPage() {
                               onClick={() =>
                                 copyToClipboard(doc.docNumber, `doc-${doc.id}`)
                               }
-                              className="btn-3d bg-white px-3 py-1.5 text-xs"
+                              className="btn-3d bg-white hover:bg-slate-50 text-slate-700 border-slate-200 px-3 py-1.5 text-xs"
                             >
                               {copiedKey === `doc-${doc.id}` ? (
                                 <>
-                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                                  Đã chép
+                                  <Check className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
+                                  <span>Đã chép</span>
                                 </>
                               ) : (
                                 <>
-                                  <Copy className="w-3.5 h-3.5" />
-                                  Chép số
+                                  <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+                                  <span>Chép số</span>
                                 </>
                               )}
                             </button>
                           )}
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2 mt-3 text-xs font-bold text-slate-800">
-                          <div>📅 Ngày cấp: {doc.issueDate || "—"}</div>
-                          <div>⏳ Hạn dùng: {doc.expiryDate || "—"}</div>
-                          <div className="col-span-2">
-                            🏛️ Nơi cấp / KCB: {doc.issuePlace || "—"}
+                        <div className="grid grid-cols-2 gap-2 mt-3 text-xs font-medium text-slate-700 tabular-nums">
+                          <div className="flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" />
+                            <span>Ngày cấp: {doc.issueDate || "—"}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" />
+                            <span>Hạn dùng: {doc.expiryDate || "—"}</span>
+                          </div>
+                          <div className="col-span-2 flex items-center gap-1.5">
+                            <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" />
+                            <span>Nơi cấp / KCB: {doc.issuePlace || "—"}</span>
                           </div>
                         </div>
 
                         {doc.note && (
-                          <p className="text-xs font-bold text-slate-700 mt-2 bg-amber-50 p-2 rounded-lg border border-amber-300">
-                            📌 {doc.note}
-                          </p>
+                          <div className="text-xs font-medium text-slate-600 mt-2.5 bg-amber-50/70 p-2.5 rounded-xl border border-amber-200/80 flex items-start gap-1.5">
+                            <FileText className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+                            <span>{doc.note}</span>
+                          </div>
                         )}
                       </div>
 
@@ -3273,10 +3663,10 @@ export default function FamilyHubPage() {
                         <button
                           type="button"
                           onClick={() => setPreviewDoc(doc)}
-                          className="btn-3d bg-sky-200 hover:bg-sky-300 text-slate-950 py-2 text-xs w-full"
+                          className="btn-3d bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 py-2 text-xs w-full"
                         >
-                          <ImageIcon className="w-4 h-4" />
-                          Xem Ảnh Chụp Giấy Tờ Đính Kèm
+                          <ImageIcon className="w-4 h-4" aria-hidden="true" />
+                          <span>Xem Ảnh Chụp Giấy Tờ Đính Kèm</span>
                         </button>
                       )}
                     </div>
@@ -3295,10 +3685,10 @@ export default function FamilyHubPage() {
             <div className="card-3d p-5 md:p-6 bg-white">
               <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
                 <div>
-                  <h2 className="text-xl font-black text-slate-950">
-                    DANH SÁCH THÀNH VIÊN TRONG GIA ĐÌNH
+                  <h2 className="text-lg md:text-xl font-bold text-slate-900">
+                    Danh sách thành viên trong gia đình
                   </h2>
-                  <p className="text-xs md:text-sm font-bold text-slate-700">
+                  <p className="text-xs md:text-sm font-medium text-slate-600 mt-0.5">
                     {currentUser?.isAdmin
                       ? "Bạn đang đăng nhập với quyền Quản trị viên (Admin) — có thể tạo và quản lý tài khoản cho các thành viên gia đình."
                       : "Danh sách thành viên gia đình. Chỉ Quản trị viên (Admin: Bố Minh) mới có quyền tạo hoặc xóa tài khoản."}
@@ -3313,52 +3703,67 @@ export default function FamilyHubPage() {
                       setMemberError("");
                       setMemberSuccess("");
                     }}
-                    className="btn-3d bg-amber-400 hover:bg-amber-300 text-slate-950 px-4 py-2.5 text-sm"
+                    className="btn-3d bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-sm"
                   >
-                    <Plus className="w-5 h-5" />
-                    Tạo Thành Viên Mới (Admin)
+                    <Plus className="w-4 h-4" aria-hidden="true" />
+                    <span>Tạo Thành Viên Mới (Admin)</span>
                   </button>
                 )}
               </div>
 
               {!currentUser?.isAdmin && (
-                <div className="card-3d-sm bg-amber-50 p-3.5 mb-5 text-xs font-extrabold text-slate-900">
-                  🔒 Để đảm bảo bảo mật gia đình, tính năng tự tạo tài khoản đã được khóa. Chỉ tài khoản Quản trị viên (<span className="underline">Bố Minh - @bominh</span>) mới có quyền cấp tài khoản mới. Bạn có thể tự sửa thông tin hoặc đổi mật khẩu tài khoản của mình bên dưới.
+                <div className="card-3d-sm bg-amber-50/80 border-amber-200 p-4 mb-5 text-xs font-medium text-slate-800 flex items-start gap-2.5">
+                  <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+                  <div>
+                    Để đảm bảo bảo mật gia đình, tính năng tự tạo tài khoản đã được khóa. Chỉ tài khoản Quản trị viên (
+                    <strong className="underline">Bố Minh - @bominh</strong>) mới có quyền cấp tài khoản mới. Bạn có thể tự sửa thông tin hoặc đổi mật khẩu tài khoản của mình bên dưới.
+                  </div>
                 </div>
               )}
 
               {memberError && (
-                <div className="card-3d-sm bg-rose-100 border-rose-900 p-3.5 mb-5 text-rose-950 font-extrabold text-sm">
-                  ⚠️ {memberError}
+                <div
+                  role="alert"
+                  className="card-3d-sm bg-rose-50 border-rose-200 p-3.5 mb-5 text-rose-800 font-semibold text-sm flex items-center gap-2"
+                >
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" aria-hidden="true" />
+                  <span>{memberError}</span>
                 </div>
               )}
 
               {memberSuccess && (
-                <div className="card-3d-sm bg-emerald-100 border-emerald-900 p-3.5 mb-5 text-emerald-950 font-extrabold text-sm">
-                  ✅ {memberSuccess}
+                <div
+                  role="status"
+                  className="card-3d-sm bg-emerald-50 border-emerald-200 p-3.5 mb-5 text-emerald-900 font-semibold text-sm flex items-center gap-2"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" aria-hidden="true" />
+                  <span>{memberSuccess}</span>
                 </div>
               )}
 
               {currentUser?.isAdmin && showMemberForm && (
                 <form
                   onSubmit={handleCreateMember}
-                  className="card-3d-sm bg-amber-50 p-4 md:p-5 mb-6 space-y-4"
+                  className="card-3d-sm bg-slate-50 border-blue-200 p-4 md:p-5 mb-6 space-y-4"
                 >
                   <div className="flex items-center justify-between">
-                    <h3 className="font-black text-base text-slate-950">
-                      ➕ CẤP TÀI KHOẢN MỚI CHO THÀNH VIÊN GIA ĐÌNH (QUYỀN ADMIN)
+                    <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                      <Plus className="w-4 h-4 text-blue-600" aria-hidden="true" />
+                      <span>Cấp tài khoản mới cho thành viên gia đình (Quyền Admin)</span>
                     </h3>
                     <button
                       type="button"
                       onClick={() => setShowMemberForm(false)}
+                      aria-label="Đóng biểu mẫu"
+                      className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-200/70"
                     >
-                      <X className="w-5 h-5" />
+                      <X className="w-5 h-5" aria-hidden="true" />
                     </button>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
-                      <label className="block text-xs font-black mb-1">
-                        TÊN HIỂN THỊ *
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Tên hiển thị *
                       </label>
                       <input
                         type="text"
@@ -3370,8 +3775,8 @@ export default function FamilyHubPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-black mb-1">
-                        TÊN ĐĂNG NHẬP (VIẾT LIỀN) *
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Tên đăng nhập (viết liền) *
                       </label>
                       <input
                         type="text"
@@ -3383,8 +3788,8 @@ export default function FamilyHubPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-black mb-1">
-                        VAI TRÒ TRONG NHÀ
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Vai trò trong nhà
                       </label>
                       <input
                         type="text"
@@ -3395,8 +3800,8 @@ export default function FamilyHubPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-black mb-1">
-                        MẬT KHẨU KHỞI TẠO *
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Mật khẩu khởi tạo *
                       </label>
                       <input
                         type="text"
@@ -3409,8 +3814,8 @@ export default function FamilyHubPage() {
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-black text-slate-950">
-                        MÀU ĐẠI DIỆN:
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                        Màu đại diện:
                       </span>
                       {[
                         "#2563EB",
@@ -3423,11 +3828,12 @@ export default function FamilyHubPage() {
                         <button
                           key={color}
                           type="button"
+                          aria-label={`Chọn màu ${color}`}
                           onClick={() => setMemColor(color)}
-                          className={`w-7 h-7 rounded-full border-2 border-slate-950 transition-transform ${
+                          className={`w-7 h-7 rounded-full border-2 border-white shadow-xs transition-transform cursor-pointer ${
                             memColor === color
-                              ? "scale-125 ring-2 ring-offset-1 ring-slate-950"
-                              : "opacity-75"
+                              ? "scale-125 ring-2 ring-blue-600"
+                              : "opacity-75 hover:opacity-100"
                           }`}
                           style={{ backgroundColor: color }}
                         />
@@ -3435,7 +3841,7 @@ export default function FamilyHubPage() {
                     </div>
                     <button
                       type="submit"
-                      className="btn-3d bg-blue-600 text-white px-6 py-2.5 text-sm"
+                      className="btn-3d bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 text-sm"
                     >
                       Tạo Tài Khoản Thành Viên
                     </button>
@@ -3446,23 +3852,26 @@ export default function FamilyHubPage() {
               {editingMemberId && (
                 <form
                   onSubmit={handleUpdateMember}
-                  className="card-3d-sm bg-sky-50 p-4 md:p-5 mb-6 space-y-4"
+                  className="card-3d-sm bg-sky-50/70 border-sky-200 p-4 md:p-5 mb-6 space-y-4"
                 >
                   <div className="flex items-center justify-between">
-                    <h3 className="font-black text-base text-slate-950">
-                      ✏️ CHỈNH SỬA THÔNG TIN & ĐỔI MẬT KHẨU THÀNH VIÊN
+                    <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                      <Pencil className="w-4 h-4 text-blue-600" aria-hidden="true" />
+                      <span>Chỉnh sửa thông tin & đổi mật khẩu thành viên</span>
                     </h3>
                     <button
                       type="button"
                       onClick={() => setEditingMemberId(null)}
+                      aria-label="Đóng biểu mẫu"
+                      className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-200/70"
                     >
-                      <X className="w-5 h-5" />
+                      <X className="w-5 h-5" aria-hidden="true" />
                     </button>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
-                      <label className="block text-xs font-black mb-1">
-                        TÊN HIỂN THỊ *
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Tên hiển thị *
                       </label>
                       <input
                         type="text"
@@ -3474,8 +3883,8 @@ export default function FamilyHubPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-black mb-1">
-                        TÊN ĐĂNG NHẬP (ID) *
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Tên đăng nhập (ID) *
                       </label>
                       <input
                         type="text"
@@ -3487,8 +3896,8 @@ export default function FamilyHubPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-black mb-1">
-                        VAI TRÒ TRONG NHÀ
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Vai trò trong nhà
                       </label>
                       <input
                         type="text"
@@ -3499,8 +3908,8 @@ export default function FamilyHubPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-black mb-1">
-                        ĐỔI MẬT KHẨU MỚI (ĐỂ TRỐNG NẾU GIỮ NGUYÊN)
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Đổi mật khẩu mới (để trống nếu giữ nguyên)
                       </label>
                       <input
                         type="text"
@@ -3513,8 +3922,8 @@ export default function FamilyHubPage() {
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-black text-slate-950">
-                        MÀU ĐẠI DIỆN:
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                        Màu đại diện:
                       </span>
                       {[
                         "#2563EB",
@@ -3527,11 +3936,12 @@ export default function FamilyHubPage() {
                         <button
                           key={color}
                           type="button"
+                          aria-label={`Chọn màu ${color}`}
                           onClick={() => setEditMemColor(color)}
-                          className={`w-7 h-7 rounded-full border-2 border-slate-950 transition-transform ${
+                          className={`w-7 h-7 rounded-full border-2 border-white shadow-xs transition-transform cursor-pointer ${
                             editMemColor === color
-                              ? "scale-125 ring-2 ring-offset-1 ring-slate-950"
-                              : "opacity-75"
+                              ? "scale-125 ring-2 ring-blue-600"
+                              : "opacity-75 hover:opacity-100"
                           }`}
                           style={{ backgroundColor: color }}
                         />
@@ -3541,13 +3951,13 @@ export default function FamilyHubPage() {
                       <button
                         type="button"
                         onClick={() => setEditingMemberId(null)}
-                        className="btn-3d bg-slate-200 text-slate-900 px-5 py-2.5 text-sm"
+                        className="btn-3d bg-white text-slate-700 border-slate-300 px-5 py-2.5 text-sm"
                       >
                         Hủy
                       </button>
                       <button
                         type="submit"
-                        className="btn-3d bg-blue-600 text-white px-6 py-2.5 text-sm"
+                        className="btn-3d bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 text-sm"
                       >
                         Lưu Cập Nhật / Mật Khẩu
                       </button>
@@ -3565,47 +3975,49 @@ export default function FamilyHubPage() {
                   return (
                     <div
                       key={m.id}
-                      className="card-3d-sm p-4 bg-white flex flex-col items-center text-center justify-between gap-2"
+                      className="card-3d-sm p-5 bg-white flex flex-col items-center text-center justify-between gap-3"
                     >
                       <div className="flex flex-col items-center gap-2 w-full">
                         <div
-                          className="w-16 h-16 rounded-full flex items-center justify-center text-white font-black text-2xl border-2 border-slate-950 shadow-[0_3px_0_#0f172a]"
+                          className="w-16 h-16 rounded-full flex items-center justify-center text-white font-extrabold text-2xl shadow-md"
                           style={{ backgroundColor: m.avatarColor }}
                         >
                           {m.fullName.charAt(0).toUpperCase()}
                         </div>
-                        <div className="font-black text-lg text-slate-950">
+                        <div className="font-bold text-lg text-slate-900">
                           {m.fullName}
                         </div>
                         <div className="flex flex-wrap items-center justify-center gap-1.5">
-                          <span className="badge-3d bg-slate-100 px-3 py-0.5 text-xs">
+                          <span className="badge-3d bg-slate-100 text-slate-700 border-slate-200 px-3 py-0.5 text-xs">
                             {m.roleLabel}
                           </span>
                           {isMemberAdmin && (
-                            <span className="badge-3d bg-amber-300 text-slate-950 px-2.5 py-0.5 text-xs">
-                              👑 ADMIN
+                            <span className="badge-3d bg-amber-100 text-amber-900 border-amber-300 px-2.5 py-0.5 text-xs">
+                              <Crown className="w-3 h-3 text-amber-600" aria-hidden="true" />
+                              <span>Admin</span>
                             </span>
                           )}
                         </div>
-                        <div className="text-xs font-bold text-slate-600">
+                        <div className="text-xs font-medium text-slate-500">
                           ID đăng nhập: @{m.username}
                         </div>
                       </div>
 
-                      <div className="w-full pt-2 mt-1 border-t border-dashed border-slate-200 flex flex-col gap-2">
+                      <div className="w-full pt-3 mt-1 border-t border-slate-200/80 flex flex-col gap-2">
                         {currentUser?.id === m.id && (
-                          <div className="badge-3d w-full py-1.5 text-xs bg-emerald-400 text-slate-950 text-center">
-                            ✓ Đang đăng nhập
+                          <div className="badge-3d w-full py-1.5 text-xs bg-emerald-50 text-emerald-800 border-emerald-200 justify-center">
+                            <Check className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
+                            <span>Đang đăng nhập</span>
                           </div>
                         )}
                         {canEditMember && (
                           <button
                             type="button"
                             onClick={() => startEditMember(m)}
-                            className="btn-3d w-full py-2 text-xs bg-sky-100 hover:bg-sky-200 text-slate-950"
+                            className="btn-3d w-full py-2 text-xs bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border-slate-200"
                           >
-                            <Pencil className="w-3.5 h-3.5" />
-                            Sửa / Đổi mật khẩu
+                            <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                            <span>Sửa / Đổi mật khẩu</span>
                           </button>
                         )}
                         {currentUser?.isAdmin &&
@@ -3614,10 +4026,10 @@ export default function FamilyHubPage() {
                             <button
                               type="button"
                               onClick={() => handleDeleteItem("members", m.id)}
-                              className="btn-3d w-full py-2 text-xs bg-rose-100 hover:bg-rose-200 text-rose-900"
+                              className="btn-3d w-full py-2 text-xs bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              Xóa tài khoản này
+                              <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                              <span>Xóa tài khoản này</span>
                             </button>
                           )}
                       </div>
@@ -3629,14 +4041,16 @@ export default function FamilyHubPage() {
 
             {/* Thông tin hạ tầng Vercel + Neon + Android APK */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="card-3d p-5 bg-emerald-100">
-                <div className="flex items-center gap-3">
-                  <Database className="w-8 h-8 text-emerald-900" />
+              <div className="card-3d p-5 bg-gradient-to-br from-white to-emerald-50/60 border-emerald-200/80">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                    <Database className="w-5 h-5" aria-hidden="true" />
+                  </div>
                   <div>
-                    <h3 className="font-black text-base text-slate-950">
+                    <h3 className="font-bold text-base text-slate-900">
                       Cơ sở dữ liệu: Neon PostgreSQL & Drizzle ORM
                     </h3>
-                    <p className="text-xs font-bold text-slate-800">
+                    <p className="text-xs font-medium text-slate-600 mt-1 leading-relaxed">
                       Trạng thái hiện tại:{" "}
                       {dbMode === "neon"
                         ? "Đang kết nối trực tiếp Neon Cloud PostgreSQL"
@@ -3646,14 +4060,16 @@ export default function FamilyHubPage() {
                 </div>
               </div>
 
-              <div className="card-3d p-5 bg-sky-100 flex flex-col justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <Smartphone className="w-8 h-8 text-sky-900 shrink-0" />
+              <div className="card-3d p-5 bg-gradient-to-br from-white to-sky-50/60 border-sky-200/80 flex flex-col justify-between gap-3.5">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+                    <Smartphone className="w-5 h-5" aria-hidden="true" />
+                  </div>
                   <div>
-                    <h3 className="font-black text-base text-slate-950">
+                    <h3 className="font-bold text-base text-slate-900">
                       Ứng dụng Android APK (Capacitor Native)
                     </h3>
-                    <p className="text-xs font-bold text-slate-800">
+                    <p className="text-xs font-medium text-slate-600 mt-1">
                       Mã gói: com.giadinh.quanly • Tương thích mọi điện thoại Android trong gia đình.
                     </p>
                   </div>
@@ -3661,9 +4077,10 @@ export default function FamilyHubPage() {
                 <a
                   href="/quan-ly-gia-dinh.apk"
                   download="quan-ly-gia-dinh.apk"
-                  className="btn-3d bg-amber-300 hover:bg-amber-200 text-slate-950 py-2.5 px-4 text-xs md:text-sm w-full text-center"
+                  className="btn-3d bg-blue-600 hover:bg-blue-700 text-white py-2.5 px-4 text-xs md:text-sm w-full text-center"
                 >
-                  📲 Tải File Cài Đặt Android (quan-ly-gia-dinh.apk)
+                  <Download className="w-4 h-4" aria-hidden="true" />
+                  <span>Tải File Cài Đặt Android (quan-ly-gia-dinh.apk)</span>
                 </a>
               </div>
             </div>
@@ -3673,22 +4090,32 @@ export default function FamilyHubPage() {
 
       {/* MODAL XEM LỊCH SỬ ĐÓNG TIỀN CÁC KỲ */}
       {historyModalExpense && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 flex items-center justify-center p-4">
-          <div className="card-3d bg-white w-full max-w-lg p-6">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="history-modal-title"
+          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+        >
+          <div className="card-3d bg-white w-full max-w-lg p-6 shadow-2xl">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-black text-slate-950">
-                📜 LỊCH SỬ ĐÓNG: {historyModalExpense.title}
+              <h3
+                id="history-modal-title"
+                className="text-lg font-bold text-slate-900 flex items-center gap-2"
+              >
+                <History className="w-5 h-5 text-blue-600" aria-hidden="true" />
+                <span>Lịch sử đóng: {historyModalExpense.title}</span>
               </h3>
               <button
                 type="button"
+                aria-label="Đóng hộp thoại lịch sử"
                 onClick={() => setHistoryModalExpense(null)}
-                className="btn-3d bg-slate-100 p-1.5"
+                className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100"
               >
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5" aria-hidden="true" />
               </button>
             </div>
             {historyModalExpense.history.length === 0 ? (
-              <p className="text-sm font-bold text-slate-600 py-6 text-center">
+              <p className="text-sm font-medium text-slate-500 py-6 text-center">
                 Chưa có lịch sử thanh toán cho khoản này.
               </p>
             ) : (
@@ -3696,18 +4123,77 @@ export default function FamilyHubPage() {
                 {historyModalExpense.history.map((h) => (
                   <div
                     key={h.id}
-                    className="card-3d-sm p-3 bg-emerald-50 flex items-center justify-between"
+                    className="card-3d-sm p-3.5 bg-emerald-50/60 border-emerald-200 flex items-center justify-between"
                   >
                     <div>
-                      <div className="font-black text-sm text-slate-950">
+                      <div className="font-bold text-sm text-slate-900 tabular-nums">
                         Kỳ: {h.periodKey} — {formatVND(h.paidAmount)}
                       </div>
-                      <div className="text-xs font-bold text-slate-700">
+                      <div className="text-xs font-medium text-slate-600">
                         Người đóng: {h.paidByName}
                       </div>
                     </div>
-                    <span className="badge-3d bg-emerald-400 px-2.5 py-0.5 text-xs">
-                      ĐÃ ĐÓNG
+                    <span className="badge-3d bg-emerald-100 text-emerald-800 border-emerald-300 px-2.5 py-0.5 text-xs">
+                      <Check className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Đã đóng</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL XEM LỊCH SỬ THU TIỀN CÁC KỲ */}
+      {historyModalIncome && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="history-income-modal-title"
+          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+        >
+          <div className="card-3d bg-white w-full max-w-lg p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3
+                id="history-income-modal-title"
+                className="text-lg font-bold text-slate-900 flex items-center gap-2"
+              >
+                <History className="w-5 h-5 text-emerald-600" aria-hidden="true" />
+                <span>Lịch sử thu: {historyModalIncome.title}</span>
+              </h3>
+              <button
+                type="button"
+                aria-label="Đóng hộp thoại lịch sử thu"
+                onClick={() => setHistoryModalIncome(null)}
+                className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" aria-hidden="true" />
+              </button>
+            </div>
+            {!historyModalIncome.history ||
+            historyModalIncome.history.length === 0 ? (
+              <p className="text-sm font-medium text-slate-500 py-6 text-center">
+                Chưa có kỳ nào được đánh dấu đã thu cho khoản này.
+              </p>
+            ) : (
+              <div className="space-y-2.5 max-h-80 overflow-y-auto">
+                {historyModalIncome.history.map((h) => (
+                  <div
+                    key={h.id}
+                    className="card-3d-sm p-3.5 bg-emerald-50/60 border-emerald-200 flex items-center justify-between"
+                  >
+                    <div>
+                      <div className="font-bold text-sm text-slate-900 tabular-nums">
+                        Kỳ: {h.periodKey} — +{formatVND(h.receivedAmount)}
+                      </div>
+                      <div className="text-xs font-medium text-slate-600">
+                        Người thu: {h.receivedByName}
+                      </div>
+                    </div>
+                    <span className="badge-3d bg-emerald-100 text-emerald-800 border-emerald-300 px-2.5 py-0.5 text-xs">
+                      <Check className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Đã thu</span>
                     </span>
                   </div>
                 ))}
@@ -3719,38 +4205,54 @@ export default function FamilyHubPage() {
 
       {/* MODAL XEM ẢNH GIẤY TỜ CÁ NHÂN */}
       {previewDoc && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 flex items-center justify-center p-4">
-          <div className="card-3d bg-white w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="preview-doc-title"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+        >
+          <div className="card-3d bg-white w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-black text-slate-950">
-                🪪 {previewDoc.title} ({previewDoc.holderName})
+              <h3
+                id="preview-doc-title"
+                className="text-lg font-bold text-slate-900 flex items-center gap-2"
+              >
+                <FileBadge className="w-5 h-5 text-blue-600" aria-hidden="true" />
+                <span>
+                  {previewDoc.title} ({previewDoc.holderName})
+                </span>
               </h3>
               <button
                 type="button"
+                aria-label="Đóng xem trước ảnh"
                 onClick={() => setPreviewDoc(null)}
-                className="btn-3d bg-slate-100 p-1.5"
+                className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100"
               >
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5" aria-hidden="true" />
               </button>
             </div>
             <div className="space-y-4">
               {previewDoc.frontImage && (
                 <div>
-                  <div className="text-xs font-black mb-1">ẢNH MẶT TRƯỚC:</div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
+                    Ảnh mặt trước:
+                  </div>
                   <img
                     src={previewDoc.frontImage}
                     alt="Mặt trước"
-                    className="w-full rounded-xl border-2 border-slate-950"
+                    className="w-full rounded-xl border border-slate-200"
                   />
                 </div>
               )}
               {previewDoc.backImage && (
                 <div>
-                  <div className="text-xs font-black mb-1">ẢNH MẶT SAU:</div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
+                    Ảnh mặt sau:
+                  </div>
                   <img
                     src={previewDoc.backImage}
                     alt="Mặt sau"
-                    className="w-full rounded-xl border-2 border-slate-950"
+                    className="w-full rounded-xl border border-slate-200"
                   />
                 </div>
               )}
@@ -3760,7 +4262,10 @@ export default function FamilyHubPage() {
       )}
 
       {/* THANH ĐIỀU HƯỚNG ĐÁY (BOTTOM NAV) CHUẨN ANDROID APK / MOBILE */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t-[3px] border-slate-950 px-2 py-2 grid grid-cols-5 gap-1 shadow-[0_-4px_0_#0f172a]">
+      <nav
+        aria-label="Điều hướng di động"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-2 py-2 grid grid-cols-5 gap-1 shadow-lg"
+      >
         {[
           { id: "finance", label: "Thu-Chi", icon: Wallet },
           { id: "schedule", label: "Lịch Con", icon: GraduationCap },
@@ -3774,6 +4279,7 @@ export default function FamilyHubPage() {
             <button
               key={tab.id}
               type="button"
+              aria-current={isActive ? "page" : undefined}
               onClick={() =>
                 setActiveTab(
                   tab.id as
@@ -3784,13 +4290,13 @@ export default function FamilyHubPage() {
                     | "members"
                 )
               }
-              className={`flex flex-col items-center justify-center py-1.5 rounded-xl border-2 font-black text-[11px] transition-all ${
+              className={`flex flex-col items-center justify-center py-2 rounded-xl font-bold text-[11px] transition-colors cursor-pointer ${
                 isActive
-                  ? "bg-amber-300 border-slate-950 text-slate-950 shadow-[0_2px_0_#0f172a]"
-                  : "border-transparent text-slate-700"
+                  ? "bg-blue-50 text-blue-600"
+                  : "text-slate-600 hover:bg-slate-50"
               }`}
             >
-              <Icon className="w-5 h-5" />
+              <Icon className="w-5 h-5" aria-hidden="true" />
               <span className="mt-0.5">{tab.label}</span>
             </button>
           );
@@ -3798,8 +4304,11 @@ export default function FamilyHubPage() {
       </nav>
 
       {loading && (
-        <div className="fixed bottom-4 right-4 z-50 badge-3d bg-amber-300 px-4 py-2 text-xs">
-          Đang đồng bộ dữ liệu gia đình...
+        <div
+          role="status"
+          className="fixed bottom-4 right-4 z-50 badge-3d bg-blue-600 text-white border-blue-600 px-4 py-2 text-xs shadow-lg"
+        >
+          <span>Đang đồng bộ dữ liệu gia đình...</span>
         </div>
       )}
     </div>

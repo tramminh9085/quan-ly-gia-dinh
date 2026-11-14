@@ -6,44 +6,116 @@ import {
   readLocalStore,
   writeLocalStore,
 } from "@/db";
-import { incomes, users } from "@/db/schema";
+import { incomes, incomeReceipts, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { getCurrentPeriodKeys } from "@/lib/lunar";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   await ensureNeonSchema();
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Vui lòng đăng nhập!" }, { status: 401 });
   }
+  const searchParams = req.nextUrl.searchParams;
+  const defaults = getCurrentPeriodKeys();
+  const monthlyKey = searchParams.get("monthlyKey") || defaults.monthly;
+  const quarterlyKey = searchParams.get("quarterlyKey") || defaults.quarterly;
+  const yearlyKey = searchParams.get("yearlyKey") || defaults.yearly;
+
   const db = getDrizzleDb();
 
   if (db && isNeonConfigured()) {
-    const [incRows, userRows] = await Promise.all([
+    const [incRows, receiptRows, userRows] = await Promise.all([
       db.select().from(incomes),
+      db.select().from(incomeReceipts),
       db.select().from(users),
     ]);
     const userMap = new Map(userRows.map((u) => [u.id, u.fullName]));
-    return NextResponse.json({
-      incomes: incRows.map((i) => ({
+
+    const result = incRows.map((i) => {
+      const targetPeriod =
+        i.cycle === "monthly"
+          ? monthlyKey
+          : i.cycle === "quarterly"
+          ? quarterlyKey
+          : yearlyKey;
+      const receipt = receiptRows.find(
+        (r) => r.incomeId === i.id && r.periodKey === targetPeriod
+      );
+      const history = receiptRows
+        .filter((r) => r.incomeId === i.id)
+        .map((r) => ({
+          ...r,
+          receivedByName: r.receivedBy
+            ? userMap.get(r.receivedBy) || "Thành viên"
+            : "Gia đình",
+        }));
+
+      return {
         ...i,
+        periodKey: targetPeriod,
         receivedByName: i.receivedBy
           ? userMap.get(i.receivedBy) || "Thành viên"
           : "Gia đình",
-      })),
+        isReceived: Boolean(receipt),
+        receipt: receipt
+          ? {
+              ...receipt,
+              receivedByName: receipt.receivedBy
+                ? userMap.get(receipt.receivedBy) || "Thành viên"
+                : "Gia đình",
+            }
+          : null,
+        history,
+      };
     });
+
+    return NextResponse.json({ incomes: result });
   } else {
     const store = readLocalStore();
     const userMap = new Map(store.users.map((u) => [u.id, u.fullName]));
-    return NextResponse.json({
-      incomes: store.incomes.map((i) => ({
+    const receiptList = store.incomeReceipts || [];
+
+    const result = store.incomes.map((i) => {
+      const targetPeriod =
+        i.cycle === "monthly"
+          ? monthlyKey
+          : i.cycle === "quarterly"
+          ? quarterlyKey
+          : yearlyKey;
+      const receipt = receiptList.find(
+        (r) => r.incomeId === i.id && r.periodKey === targetPeriod
+      );
+      const history = receiptList
+        .filter((r) => r.incomeId === i.id)
+        .map((r) => ({
+          ...r,
+          receivedByName: r.receivedBy
+            ? userMap.get(r.receivedBy) || "Thành viên"
+            : "Gia đình",
+        }));
+
+      return {
         ...i,
+        periodKey: targetPeriod,
         receivedByName: i.receivedBy
           ? userMap.get(i.receivedBy) || "Thành viên"
           : "Gia đình",
-      })),
+        isReceived: Boolean(receipt),
+        receipt: receipt
+          ? {
+              ...receipt,
+              receivedByName: receipt.receivedBy
+                ? userMap.get(receipt.receivedBy) || "Thành viên"
+                : "Gia đình",
+            }
+          : null,
+        history,
+      };
     });
+
+    return NextResponse.json({ incomes: result });
   }
 }
 
@@ -198,6 +270,9 @@ export async function DELETE(req: NextRequest) {
   } else {
     const store = readLocalStore();
     store.incomes = store.incomes.filter((i) => i.id !== id);
+    store.incomeReceipts = (store.incomeReceipts || []).filter(
+      (r) => r.incomeId !== id
+    );
     writeLocalStore(store);
   }
   return NextResponse.json({ ok: true });

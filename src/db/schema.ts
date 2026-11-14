@@ -62,19 +62,43 @@ export const expensePayments = pgTable(
   })
 );
 
-// 4. Các khoản thu (Tháng / Năm)
+// 4. Các khoản thu (Tháng / Quý / Năm)
 export const incomes = pgTable("incomes", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   amount: bigint("amount", { mode: "number" }).notNull(),
-  cycle: text("cycle").notNull(), // 'monthly' | 'yearly'
-  periodKey: text("period_key").notNull(), // '2026-11' hoặc '2026'
+  cycle: text("cycle").notNull(), // 'monthly' | 'quarterly' | 'yearly'
+  periodKey: text("period_key").notNull(), // '2026-11', '2026-Q4' hoặc '2026'
   receivedBy: integer("received_by").references(() => users.id, {
     onDelete: "set null",
   }),
   note: text("note").default(""),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// 4b. Lịch sử đã thu tiền theo từng kỳ (Income Receipts)
+export const incomeReceipts = pgTable(
+  "income_receipts",
+  {
+    id: serial("id").primaryKey(),
+    incomeId: integer("income_id")
+      .notNull()
+      .references(() => incomes.id, { onDelete: "cascade" }),
+    periodKey: text("period_key").notNull(), // VD: '2026-11', '2026-Q4', '2026'
+    receivedAmount: bigint("received_amount", { mode: "number" }).notNull(),
+    receivedBy: integer("received_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    receivedAt: timestamp("received_at").defaultNow().notNull(),
+    note: text("note").default(""),
+  },
+  (table) => ({
+    incomePeriodIdx: uniqueIndex("income_period_idx").on(
+      table.incomeId,
+      table.periodKey
+    ),
+  })
+);
 
 // 5. Kho Tài khoản dùng chung (Lớp học, Cuộc thi, Tiện ích gia đình...)
 export const sharedAccounts = pgTable("shared_accounts", {

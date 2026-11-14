@@ -9,12 +9,16 @@ import {
   Sparkles,
   KeyRound,
   Lock,
+  AlertCircle,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -47,67 +51,75 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col justify-center items-center p-4 md:p-8 bg-[#f4f6fb]">
-      <div className="w-full max-w-xl">
-        {/* Header Banner Nổi Khối */}
-        <div className="card-3d bg-amber-300 p-6 mb-6 flex items-center gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-slate-950 text-amber-300 flex items-center justify-center border-2 border-slate-950 shadow-[0_4px_0_#1e293b] shrink-0">
-            <Home className="w-9 h-9" />
+    <div className="min-h-screen flex flex-col justify-center items-center p-4 md:p-8">
+      <div className="w-full max-w-xl space-y-5">
+        {/* Header Brand Card (Soft UI Evolution) */}
+        <div className="card-3d bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-700 text-white p-6 md:p-7 flex items-center gap-4 border-blue-500/30 shadow-xl shadow-blue-900/10">
+          <div className="w-16 h-16 rounded-2xl bg-white/15 backdrop-blur-md text-white flex items-center justify-center border border-white/25 shadow-inner shrink-0">
+            <Home className="w-8 h-8" aria-hidden="true" />
           </div>
           <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-slate-950 text-white text-xs font-extrabold uppercase tracking-wider mb-1">
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" /> Tổ Ấm Số • Family Hub
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 backdrop-blur-sm text-amber-200 text-xs font-bold tracking-wide mb-1.5 border border-white/15">
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" aria-hidden="true" />
+              <span>Tổ Ấm Số • Family Hub</span>
             </div>
-            <h1 className="text-2xl md:text-3xl font-black text-slate-950 leading-tight">
-              QUẢN LÝ GIA ĐÌNH
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-white leading-tight">
+              Quản Lý Gia Đình
             </h1>
-            <p className="text-sm font-bold text-slate-800 mt-0.5">
+            <p className="text-xs md:text-sm font-medium text-blue-100 mt-1">
               Thu chi định kỳ • Lịch con • Ngày giỗ Âm/Dương • Tài khoản & Giấy tờ
             </p>
           </div>
         </div>
 
-        {/* Khối Form Đăng nhập Bảo mật */}
+        {/* Form Đăng nhập Bảo mật */}
         <div className="card-3d p-6 md:p-8 bg-white">
-          <div className="flex items-center gap-3 pb-4 mb-5 border-b-2 border-slate-950">
-            <div className="w-11 h-11 rounded-xl bg-blue-600 text-white flex items-center justify-center border-2 border-slate-950 shadow-[0_3px_0_#0f172a]">
-              <LogIn className="w-5 h-5" />
+          <div className="flex items-center gap-3.5 pb-5 mb-5 border-b border-slate-200">
+            <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-200 shrink-0">
+              <LogIn className="w-5 h-5" aria-hidden="true" />
             </div>
             <div>
-              <h2 className="text-lg font-black text-slate-950 uppercase">
-                ĐĂNG NHẬP HỆ THỐNG GIA ĐÌNH
+              <h2 className="text-lg font-bold text-slate-900">
+                Đăng nhập Không gian Gia đình
               </h2>
-              <p className="text-xs font-bold text-slate-600">
-                Yêu cầu xác thực tài khoản thành viên đã được Admin cấp phép
+              <p className="text-xs font-medium text-slate-600">
+                Xác thực tài khoản thành viên đã được Quản trị viên cấp phép
               </p>
             </div>
           </div>
 
-          <div className="card-3d-sm bg-amber-50 border-slate-950 p-3.5 mb-5 text-slate-900 text-xs font-bold flex items-start gap-2.5">
-            <Lock className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-            <div>
-              <span className="font-black text-slate-950">Chế độ bảo mật gia đình:</span>{" "}
-              Hệ thống không cho phép tự đăng ký tài khoản bên ngoài. Chỉ Quản trị viên{" "}
-              <span className="font-black underline">Admin (Bố Minh - bominh)</span> mới có quyền khởi tạo tài khoản cho các thành viên trong gia đình.
+          <div className="card-3d-sm bg-amber-50/80 border-amber-200/80 p-4 mb-5 text-slate-800 text-xs font-medium flex items-start gap-3">
+            <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="leading-relaxed">
+              <span className="font-bold text-slate-900">Chế độ bảo mật nội bộ:</span>{" "}
+              Hệ thống không mở đăng ký tự do. Chỉ Quản trị viên mới có quyền cấp tài khoản cho thành viên trong nhà.
             </div>
           </div>
 
           {error && (
-            <div className="card-3d-sm bg-rose-100 border-rose-900 p-3.5 mb-5 text-rose-950 font-extrabold text-sm flex items-center gap-2">
-              <span>⚠️</span> {error}
+            <div
+              role="alert"
+              className="card-3d-sm bg-rose-50 border-rose-200 p-3.5 mb-5 text-rose-800 font-semibold text-sm flex items-center gap-2.5"
+            >
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" aria-hidden="true" />
+              <span>{error}</span>
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-black text-slate-950 mb-1.5">
-                TÊN ĐĂNG NHẬP (VIẾT LIỀN KHÔNG DẤU) *
+              <label
+                htmlFor="login-username"
+                className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5"
+              >
+                Tên đăng nhập (viết liền không dấu) *
               </label>
               <input
+                id="login-username"
                 type="text"
                 required
                 autoComplete="username"
-                placeholder="Nhập tên đăng nhập (VD: bominh)..."
+                placeholder="Nhập tên đăng nhập..."
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="input-3d"
@@ -115,38 +127,59 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-black text-slate-950 mb-1.5">
-                MẬT KHẨU *
+              <label
+                htmlFor="login-password"
+                className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5"
+              >
+                Mật khẩu *
               </label>
               <div className="relative">
                 <input
-                  type="password"
+                  id="login-password"
+                  type={showPassword ? "text" : "password"}
                   required
                   autoComplete="current-password"
                   placeholder="Nhập mật khẩu..."
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="input-3d"
+                  className="input-3d pr-11"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                  aria-pressed={showPassword}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" aria-hidden="true" />
+                  ) : (
+                    <Eye className="w-4 h-4" aria-hidden="true" />
+                  )}
+                </button>
               </div>
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="btn-3d w-full py-4 text-lg bg-amber-400 hover:bg-amber-300 text-slate-950 mt-2"
+              className="btn-3d w-full py-3.5 text-base bg-blue-600 hover:bg-blue-700 text-white mt-2 shadow-md shadow-blue-600/20"
             >
-              <KeyRound className="w-5 h-5" />
-              {loading ? "Đang xác thực..." : "ĐĂNG NHẬP VÀO KHÔNG GIAN GIA ĐÌNH"}
+              <KeyRound className="w-5 h-5" aria-hidden="true" />
+              <span>
+                {loading
+                  ? "Đang xác thực..."
+                  : "Đăng nhập vào Không gian Gia đình"}
+              </span>
             </button>
           </form>
 
-          <div className="mt-6 pt-4 border-t-2 border-dashed border-slate-300 flex items-center justify-between text-xs font-bold text-slate-700">
+          <div className="mt-6 pt-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs font-medium text-slate-600">
             <span className="flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              Bảo mật bởi Quản trị viên Gia đình
+              <ShieldCheck className="w-4 h-4 text-emerald-600" aria-hidden="true" />
+              <span>Bảo mật bởi Quản trị viên Gia đình</span>
             </span>
-            <span>Tương phản cao • Dễ nhìn</span>
+            <span>Soft UI • Tương phản chuẩn WCAG AAA</span>
           </div>
         </div>
       </div>

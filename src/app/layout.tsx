@@ -1,5 +1,13 @@
 import type { Metadata, Viewport } from "next";
+import { Be_Vietnam_Pro } from "next/font/google";
 import "./globals.css";
+
+const beVietnamPro = Be_Vietnam_Pro({
+  subsets: ["vietnamese", "latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  display: "swap",
+  variable: "--font-be-vietnam",
+});
 
 export const metadata: Metadata = {
   title: "Quản Lý Gia Đình - Tổ Ấm Số",
@@ -11,8 +19,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  themeColor: "#0f172a",
+  themeColor: "#2563EB",
 };
 
 export default function RootLayout({
@@ -21,8 +28,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="vi">
-      <body className="min-h-screen antialiased selection:bg-yellow-300 selection:text-slate-950">
+    <html lang="vi" className={beVietnamPro.variable}>
+      <body className="min-h-screen antialiased selection:bg-blue-600 selection:text-white">
         {children}
       </body>
     </html>

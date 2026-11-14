@@ -76,6 +76,16 @@ export interface IncomeRecord {
   createdAt: string;
 }
 
+export interface IncomeReceiptRecord {
+  id: number;
+  incomeId: number;
+  periodKey: string;
+  receivedAmount: number;
+  receivedBy: number | null;
+  receivedAt: string;
+  note: string;
+}
+
 export interface SharedAccountRecord {
   id: number;
   title: string;
@@ -150,6 +160,7 @@ export interface FamilyDatabaseStore {
   recurringExpenses: RecurringExpenseRecord[];
   expensePayments: ExpensePaymentRecord[];
   incomes: IncomeRecord[];
+  incomeReceipts: IncomeReceiptRecord[];
   sharedAccounts: SharedAccountRecord[];
   personalDocuments: PersonalDocumentRecord[];
   familyEvents: FamilyEventRecord[];
@@ -293,6 +304,17 @@ function createInitialSeedData(): FamilyDatabaseStore {
         receivedBy: 1,
         note: "Khoản thu định kỳ hàng năm",
         createdAt: nowIso,
+      },
+    ],
+    incomeReceipts: [
+      {
+        id: 1,
+        incomeId: 1,
+        periodKey: monthPeriod,
+        receivedAmount: 25000000,
+        receivedBy: 1,
+        receivedAt: nowIso,
+        note: "Đã nhận lương chuyển khoản kỳ này",
       },
     ],
     sharedAccounts: [
@@ -667,6 +689,20 @@ export async function ensureNeonSchema() {
       );
     `;
     await sql`
+      CREATE TABLE IF NOT EXISTS income_receipts (
+        id SERIAL PRIMARY KEY,
+        income_id INTEGER NOT NULL REFERENCES incomes(id) ON DELETE CASCADE,
+        period_key TEXT NOT NULL,
+        received_amount BIGINT NOT NULL,
+        received_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        received_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        note TEXT DEFAULT ''
+      );
+    `;
+    await sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS income_period_idx ON income_receipts(income_id, period_key);
+    `;
+    await sql`
       CREATE TABLE IF NOT EXISTS shared_accounts (
         id SERIAL PRIMARY KEY,
         title TEXT NOT NULL,
@@ -819,6 +855,9 @@ export function readLocalStore(): FamilyDatabaseStore {
     try {
       const raw = fs.readFileSync(filePath, "utf-8");
       const parsed = JSON.parse(raw) as FamilyDatabaseStore;
+      if (!parsed.incomeReceipts) {
+        parsed.incomeReceipts = [];
+      }
       // Lọc bỏ các khoản đóng theo tuần cũ nếu có
       if (parsed.recurringExpenses?.some((e) => (e.cycle as string) === "weekly")) {
         parsed.recurringExpenses = parsed.recurringExpenses.filter(
