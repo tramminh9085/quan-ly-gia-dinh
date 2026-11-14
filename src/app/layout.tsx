@@ -35,6 +35,10 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               try {
+                // Nhận diện Android / Capacitor ngay lập tức để chèn Safe-Area Status Bar
+                if (/Android/i.test(navigator.userAgent) || Boolean(window.Capacitor)) {
+                  document.documentElement.classList.add('is-android');
+                }
                 const savedTheme = localStorage.getItem('family_theme_mode');
                 if (savedTheme === 'light') {
                   document.documentElement.classList.remove('dark');

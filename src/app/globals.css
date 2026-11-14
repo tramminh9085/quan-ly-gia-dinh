@@ -219,6 +219,10 @@ textarea:focus-visible {
   padding-top: max(env(safe-area-inset-top, 0px), 36px);
 }
 
+html.is-android header {
+  padding-top: max(env(safe-area-inset-top, 0px), 38px) !important;
+}
+
 .safe-bottom-nav {
   padding-bottom: max(env(safe-area-inset-bottom, 0px), 14px);
 }
@@ -447,5 +451,59 @@ html.dark .bg-blue-50 {
   background-color: rgba(30, 58, 138, 0.25) !important;
   border-color: rgba(59, 130, 246, 0.35) !important;
 }
+
+/* ==========================================================================
+   BENTO SUMMARY CARDS IN DARK MODE (KHẮC PHỤC CHỮ TRẮNG TRÊN NỀN TRẮNG)
+   ========================================================================== */
+html.dark [class*="bg-gradient-"][class*="from-white"],
+html.dark [class*="from-white"] {
+  background-image: none !important;
+  background-color: #131c31 !important;
+}
+
+/* Thẻ Summary Khoản đóng định kỳ / Còn phải đóng (Amber tint) */
+html.dark .card-3d[class*="to-amber-50"],
+html.dark .card-3d-sm[class*="to-amber-50"],
+html.dark [class*="from-white"][class*="to-amber-50"] {
+  background-color: #151d2f !important;
+  background-image: linear-gradient(135deg, #131c31 0%, rgba(120, 53, 15, 0.28) 100%) !important;
+  border-color: rgba(245, 158, 11, 0.35) !important;
+}
+
+/* Thẻ Summary Lịch con hôm nay / Đã đóng trong kỳ (Sky tint) */
+html.dark .card-3d[class*="to-sky-50"],
+html.dark .card-3d-sm[class*="to-sky-50"],
+html.dark [class*="from-white"][class*="to-sky-50"] {
+  background-color: #151d2f !important;
+  background-image: linear-gradient(135deg, #131c31 0%, rgba(14, 165, 233, 0.25) 100%) !important;
+  border-color: rgba(56, 189, 248, 0.35) !important;
+}
+
+/* Thẻ Summary Lịch giỗ & sự kiện (Rose tint) */
+html.dark .card-3d[class*="to-rose-50"],
+html.dark .card-3d-sm[class*="to-rose-50"],
+html.dark [class*="from-white"][class*="to-rose-50"] {
+  background-color: #151d2f !important;
+  background-image: linear-gradient(135deg, #131c31 0%, rgba(244, 63, 94, 0.25) 100%) !important;
+  border-color: rgba(244, 63, 94, 0.35) !important;
+}
+
+/* Thẻ Summary Neon DB / Tiến độ (Emerald tint) */
+html.dark .card-3d[class*="to-emerald-50"],
+html.dark .card-3d-sm[class*="to-emerald-50"],
+html.dark [class*="from-white"][class*="to-emerald-50"] {
+  background-color: #151d2f !important;
+  background-image: linear-gradient(135deg, #131c31 0%, rgba(16, 185, 129, 0.25) 100%) !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+}
+
+/* Đảm bảo chữ phụ đề luôn có màu sáng dễ đọc trên nền tối */
+html.dark .text-slate-600 {
+  color: #94a3b8 !important;
+}
+html.dark .text-slate-500 {
+  color: #64748b !important;
+}
+
 
 

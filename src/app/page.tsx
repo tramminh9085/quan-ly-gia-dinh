@@ -388,8 +388,9 @@ export default function FamilyHubPage() {
         .Capacitor?.isNativePlatform?.()
     );
     const isStandalone = window.matchMedia("(display-mode: standalone)").matches;
-    const isAndroidWV = /wv|Android.*Version\/[\d.]+/i.test(navigator.userAgent);
-    if (isCapacitor || isStandalone || isAndroidWV) {
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isCapacitor || isStandalone || isAndroid || isMobile) {
       setIsAppShell(true);
     }
   }, []);
@@ -1211,7 +1212,7 @@ export default function FamilyHubPage() {
         style={{
           paddingTop: isAppShell
             ? "max(env(safe-area-inset-top, 0px), 38px)"
-            : "max(env(safe-area-inset-top, 0px), 0px)",
+            : undefined,
         }}
         className={`sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs transition-all duration-300 ease-in-out ${
           shouldHideTopbar
@@ -1331,25 +1332,25 @@ export default function FamilyHubPage() {
           <button
             type="button"
             onClick={() => setActiveTab("finance")}
-            className="card-3d card-3d-interactive p-5 bg-gradient-to-br from-white via-white to-amber-50/70 border-amber-200/80 text-left flex items-center justify-between gap-3"
+            className="card-3d card-3d-interactive p-5 bg-gradient-to-br from-white via-white to-amber-50/70 border-amber-200/80 dark:from-[#131c31] dark:via-[#131c31] dark:to-amber-950/40 dark:border-amber-800/60 text-left flex items-center justify-between gap-3"
           >
             <div className="min-w-0">
-              <div className="text-xs font-bold uppercase text-amber-800 tracking-wider">
+              <div className="text-xs font-bold uppercase text-amber-800 dark:text-amber-300 tracking-wider">
                 Khoản đóng định kỳ
               </div>
-              <div className="text-base md:text-lg font-extrabold text-slate-900 mt-1">
+              <div className="text-base md:text-lg font-extrabold text-slate-900 dark:text-white mt-1">
                 {financeSummary.unpaidCount > 0
                   ? `Còn ${financeSummary.unpaidCount} khoản chưa đóng`
                   : "Đã hoàn tất mọi khoản!"}
               </div>
-              <div className="text-xs font-semibold text-slate-600 mt-1 tabular-nums">
+              <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 mt-1 tabular-nums">
                 Cần đóng:{" "}
-                <span className="font-bold text-amber-900">
+                <span className="font-bold text-amber-900 dark:text-amber-300">
                   {formatVND(financeSummary.totalUnpaid)}
                 </span>
               </div>
             </div>
-            <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 border border-amber-200 flex items-center justify-center shrink-0">
+            <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/60 flex items-center justify-center shrink-0">
               <Wallet className="w-6 h-6" aria-hidden="true" />
             </div>
           </button>
@@ -1357,18 +1358,18 @@ export default function FamilyHubPage() {
           <button
             type="button"
             onClick={() => setActiveTab("schedule")}
-            className="card-3d card-3d-interactive p-5 bg-gradient-to-br from-white via-white to-sky-50/70 border-sky-200/80 text-left flex items-center justify-between gap-3"
+            className="card-3d card-3d-interactive p-5 bg-gradient-to-br from-white via-white to-sky-50/70 border-sky-200/80 dark:from-[#131c31] dark:via-[#131c31] dark:to-sky-950/40 dark:border-sky-800/60 text-left flex items-center justify-between gap-3"
           >
             <div className="min-w-0">
-              <div className="text-xs font-bold uppercase text-sky-800 tracking-wider">
+              <div className="text-xs font-bold uppercase text-sky-800 dark:text-sky-300 tracking-wider">
                 Lịch con hôm nay ({DAY_NAMES[todayInfo.isoDay]})
               </div>
-              <div className="text-base md:text-lg font-extrabold text-slate-900 mt-1">
+              <div className="text-base md:text-lg font-extrabold text-slate-900 dark:text-white mt-1">
                 {todaySchedules.length > 0
                   ? `${todaySchedules.length} ca học cần đưa đón`
                   : "Hôm nay không có ca học"}
               </div>
-              <div className="text-xs font-semibold text-slate-600 mt-1 truncate">
+              <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 mt-1 truncate">
                 {todaySchedules[0]
                   ? `${todaySchedules[0].startTime}: ${todaySchedules[0].childName} (${todaySchedules[0].dropoffName} đưa)${
                       todaySchedules[0].location
@@ -1378,7 +1379,7 @@ export default function FamilyHubPage() {
                   : "Chạm để xem thời khóa biểu tuần"}
               </div>
             </div>
-            <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 border border-sky-200 flex items-center justify-center shrink-0">
+            <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 border border-sky-200 dark:bg-sky-950/50 dark:text-sky-300 dark:border-sky-800/60 flex items-center justify-center shrink-0">
               <GraduationCap className="w-6 h-6" aria-hidden="true" />
             </div>
           </button>
@@ -1386,16 +1387,16 @@ export default function FamilyHubPage() {
           <button
             type="button"
             onClick={() => setActiveTab("events")}
-            className="card-3d card-3d-interactive p-5 bg-gradient-to-br from-white via-white to-rose-50/70 border-rose-200/80 text-left flex items-center justify-between gap-3"
+            className="card-3d card-3d-interactive p-5 bg-gradient-to-br from-white via-white to-rose-50/70 border-rose-200/80 dark:from-[#131c31] dark:via-[#131c31] dark:to-rose-950/40 dark:border-rose-800/60 text-left flex items-center justify-between gap-3"
           >
             <div className="min-w-0">
-              <div className="text-xs font-bold uppercase text-rose-800 tracking-wider">
+              <div className="text-xs font-bold uppercase text-rose-800 dark:text-rose-300 tracking-wider">
                 Lịch giỗ & Sự kiện sắp tới
               </div>
-              <div className="text-base md:text-lg font-extrabold text-slate-900 mt-1 truncate">
+              <div className="text-base md:text-lg font-extrabold text-slate-900 dark:text-white mt-1 truncate">
                 {events[0] ? events[0].title : "Chưa có sự kiện"}
               </div>
-              <div className="text-xs font-semibold text-rose-700 mt-1 inline-flex items-center gap-1 tabular-nums">
+              <div className="text-xs font-semibold text-rose-700 dark:text-rose-300 mt-1 inline-flex items-center gap-1 tabular-nums">
                 {events[0] ? (
                   <>
                     <Clock className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
@@ -1408,7 +1409,7 @@ export default function FamilyHubPage() {
                 )}
               </div>
             </div>
-            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-700 border border-rose-200 flex items-center justify-center shrink-0">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-700 border border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800/60 flex items-center justify-center shrink-0">
               <BellRing className="w-6 h-6" aria-hidden="true" />
             </div>
           </button>
@@ -1504,57 +1505,57 @@ export default function FamilyHubPage() {
                 </div>
               </div>
 
-              <div className="card-3d p-5 bg-white text-slate-900">
+              <div className="card-3d p-5 bg-white dark:bg-[#131c31] dark:border-slate-800 text-slate-900 dark:text-white">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Tổng khoản phải đóng
                   </span>
-                  <ArrowDownCircle className="w-5 h-5 text-blue-600" aria-hidden="true" />
+                  <ArrowDownCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
                 </div>
-                <div className="text-2xl font-extrabold mt-2 text-slate-900 tabular-nums">
+                <div className="text-2xl font-extrabold mt-2 text-slate-900 dark:text-white tabular-nums">
                   {formatVND(financeSummary.totalDue)}
                 </div>
-                <div className="text-xs font-medium mt-1.5 text-slate-600">
+                <div className="text-xs font-medium mt-1.5 text-slate-600 dark:text-slate-400">
                   Tổng cộng {expenses.length} khoản định kỳ
                 </div>
               </div>
 
-              <div className="card-3d p-5 bg-gradient-to-br from-white to-sky-50/80 border-sky-200/80 text-slate-900">
+              <div className="card-3d p-5 bg-gradient-to-br from-white to-sky-50/80 border-sky-200/80 dark:from-[#131c31] dark:to-sky-950/40 dark:border-sky-800/60 text-slate-900 dark:text-white">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-sky-800">
+                  <span className="text-xs font-bold uppercase tracking-wider text-sky-800 dark:text-sky-300">
                     Đã đóng trong kỳ
                   </span>
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600" aria-hidden="true" />
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
                 </div>
-                <div className="text-2xl font-extrabold mt-2 text-emerald-700 tabular-nums">
+                <div className="text-2xl font-extrabold mt-2 text-emerald-700 dark:text-emerald-400 tabular-nums">
                   {formatVND(financeSummary.totalPaid)}
                 </div>
-                <div className="text-xs font-semibold mt-1.5 text-slate-600 tabular-nums">
+                <div className="text-xs font-semibold mt-1.5 text-slate-600 dark:text-slate-400 tabular-nums">
                   Hoàn thành {financeSummary.paidCount}/{expenses.length} khoản (
                   {financeSummary.progressPercent}%)
                 </div>
               </div>
 
-              <div className="card-3d p-5 bg-gradient-to-br from-white to-amber-50/80 border-amber-200/80 text-slate-900">
+              <div className="card-3d p-5 bg-gradient-to-br from-white to-amber-50/80 border-amber-200/80 dark:from-[#131c31] dark:to-amber-950/40 dark:border-amber-800/60 text-slate-900 dark:text-white">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-amber-900">
+                  <span className="text-xs font-bold uppercase tracking-wider text-amber-900 dark:text-amber-300">
                     Còn phải đóng
                   </span>
-                  <Clock className="w-5 h-5 text-amber-600" aria-hidden="true" />
+                  <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" aria-hidden="true" />
                 </div>
-                <div className="text-2xl font-extrabold mt-2 text-rose-600 tabular-nums">
+                <div className="text-2xl font-extrabold mt-2 text-rose-600 dark:text-rose-400 tabular-nums">
                   {formatVND(financeSummary.totalUnpaid)}
                 </div>
-                <div className="text-xs font-semibold mt-1.5 text-slate-600">
+                <div className="text-xs font-semibold mt-1.5 text-slate-600 dark:text-slate-400">
                   Còn {financeSummary.unpaidCount} khoản chờ thanh toán
                 </div>
               </div>
             </div>
 
             {/* Thanh tiến độ đóng tiền định kỳ */}
-            <div className="card-3d p-5 bg-white">
+            <div className="card-3d p-5 bg-white dark:bg-[#131c31] dark:border-slate-800">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                <span className="font-bold text-slate-900 text-sm md:text-base tabular-nums">
+                <span className="font-bold text-slate-900 dark:text-white text-sm md:text-base tabular-nums">
                   Tiến độ thanh toán các khoản định kỳ ({financeSummary.progressPercent}%)
                 </span>
                 <div className="flex flex-wrap items-center gap-2 text-xs font-bold tabular-nums">
@@ -1565,9 +1566,9 @@ export default function FamilyHubPage() {
                     onChange={(e) => {
                       if (e.target.value) setMonthlyKey(e.target.value);
                     }}
-                    className="badge-3d bg-blue-50 text-blue-800 border-blue-200 px-3 py-1 cursor-pointer"
+                    className="badge-3d bg-blue-50 text-blue-800 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800 px-3 py-1 cursor-pointer"
                   />
-                  <span className="badge-3d bg-slate-100 text-slate-700 border-slate-200 px-3 py-1">
+                  <span className="badge-3d bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 px-3 py-1">
                     Năm: {yearlyKey}
                   </span>
                 </div>
@@ -1577,7 +1578,7 @@ export default function FamilyHubPage() {
                 aria-valuenow={financeSummary.progressPercent}
                 aria-valuemin={0}
                 aria-valuemax={100}
-                className="w-full h-3.5 rounded-full bg-slate-100 border border-slate-200 overflow-hidden"
+                className="w-full h-3.5 rounded-full bg-slate-100 border border-slate-200 dark:bg-slate-800 dark:border-slate-700 overflow-hidden"
               >
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-blue-600 to-emerald-500 transition-all duration-300"
@@ -4234,16 +4235,16 @@ export default function FamilyHubPage() {
 
             {/* Thông tin hạ tầng Vercel + Neon + Android APK */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="card-3d p-5 bg-gradient-to-br from-white to-emerald-50/60 border-emerald-200/80">
+              <div className="card-3d p-5 bg-gradient-to-br from-white to-emerald-50/60 border-emerald-200/80 dark:from-[#131c31] dark:to-emerald-950/40 dark:border-emerald-800/60">
                 <div className="flex items-start gap-3.5">
-                  <div className="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                  <div className="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 flex items-center justify-center shrink-0">
                     <Database className="w-5 h-5" aria-hidden="true" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-base text-slate-900">
+                    <h3 className="font-bold text-base text-slate-900 dark:text-white">
                       Cơ sở dữ liệu: Neon PostgreSQL & Drizzle ORM
                     </h3>
-                    <p className="text-xs font-medium text-slate-600 mt-1 leading-relaxed">
+                    <p className="text-xs font-medium text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
                       Trạng thái hiện tại:{" "}
                       {dbMode === "neon"
                         ? "Đang kết nối trực tiếp Neon Cloud PostgreSQL"
@@ -4253,16 +4254,16 @@ export default function FamilyHubPage() {
                 </div>
               </div>
 
-              <div className="card-3d p-5 bg-gradient-to-br from-white to-sky-50/60 border-sky-200/80 flex flex-col justify-between gap-3.5">
+              <div className="card-3d p-5 bg-gradient-to-br from-white to-sky-50/60 border-sky-200/80 dark:from-[#131c31] dark:to-sky-950/40 dark:border-sky-800/60 flex flex-col justify-between gap-3.5">
                 <div className="flex items-start gap-3.5">
-                  <div className="w-11 h-11 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+                  <div className="w-11 h-11 rounded-xl bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300 flex items-center justify-center shrink-0">
                     <Smartphone className="w-5 h-5" aria-hidden="true" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-base text-slate-900">
+                    <h3 className="font-bold text-base text-slate-900 dark:text-white">
                       Ứng dụng Android APK (Capacitor Native)
                     </h3>
-                    <p className="text-xs font-medium text-slate-600 mt-1">
+                    <p className="text-xs font-medium text-slate-600 dark:text-slate-300 mt-1">
                       Mã gói: com.giadinh.quanly • Tương thích mọi điện thoại Android trong gia đình.
                     </p>
                   </div>
