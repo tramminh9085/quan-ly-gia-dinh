@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Mất kết nối mạng - Quản Lý Gia Đình</title>
+  <style>
+    * { box-sizing: border-box; font-family: 'Be Vietnam Pro', system-ui, -apple-system, sans-serif; }
+    body {
+      margin: 0; padding: 24px;
+      background: #F8FAFC;
+      color: #0F172A;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      background: #FFFFFF;
+      border: 1.5px solid #CBD5E1;
+      border-radius: 22px;
+      padding: 28px 22px;
+      max-width: 380px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 12px 28px -8px rgba(15, 23, 42, 0.08);
+    }
+    .icon {
+      width: 64px; height: 64px;
+      border-radius: 18px;
+      background: #EFF6FF;
+      color: #2563EB;
+      border: 1.5px solid #BFDBFE;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px; font-weight: 800;
+      margin: 0 auto 16px;
+    }
+    h1 { font-size: 20px; font-weight: 800; margin: 0 0 8px; color: #0F172A; }
+    p { font-size: 13px; font-weight: 600; color: #475569; line-height: 1.55; margin: 0 0 20px; }
+    .btn {
+      width: 100%;
+      padding: 12px 16px;
+      border-radius: 14px;
+      border: 1.5px solid #2563EB;
+      background: #2563EB;
+      color: #FFFFFF;
+      font-weight: 800;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .btn:active { transform: translateY(1px); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">GĐ</div>
+    <h1>Đang chờ kết nối Internet</h1>
+    <p>
+      Vui lòng bật Wi-Fi hoặc dữ liệu di động (4G/5G) để đồng bộ dữ liệu Quản Lý Gia Đình mới nhất.
+      Các lịch hẹn thông báo (Giỗ, Đóng tiền, Đón con) đã lưu trên máy vẫn hoạt động bình thường!
+    </p>
+    <button class="btn" onclick="retryConnect()">Thử Kết Nối Lại Ngay</button>
+  </div>
+  <script>
+    function retryConnect() {
+      window.location.replace('https://minhtramqlgd.vercel.app');
+    }
+    window.addEventListener('online', function() {
+      retryConnect();
+    });
+  </script>
+</body>
+</html>

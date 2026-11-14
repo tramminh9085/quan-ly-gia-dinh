@@ -8,12 +8,14 @@
     "build": "next build",
     "start": "next start",
     "db:push": "drizzle-kit push",
-    "cap:sync": "cap sync android"
+    "cap:sync": "cap sync android",
+    "apk:build": "npx cap sync android && cd android && gradlew.bat assembleDebug"
   },
   "dependencies": {
     "@capacitor/android": "^7.0.0",
     "@capacitor/cli": "^7.0.0",
     "@capacitor/core": "^7.0.0",
+    "@capacitor/local-notifications": "^7.0.0",
     "@neondatabase/serverless": "^0.10.4",
     "bcryptjs": "^2.4.3",
     "drizzle-orm": "^0.38.3",

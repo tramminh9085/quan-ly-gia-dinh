@@ -53,6 +53,17 @@ import {
   Download,
 } from "lucide-react";
 import { solarToLunar, getCurrentPeriodKeys } from "@/lib/lunar";
+import {
+  type NotificationSettings,
+  type UpcomingReminderPreview,
+  DEFAULT_NOTIFICATION_SETTINGS,
+  loadNotificationSettings,
+  saveNotificationSettings,
+  syncFamilyNotifications,
+  checkNotificationPermissionStatus,
+  requestNotificationPermission,
+  sendTestNotification,
+} from "@/lib/notifications";
 
 interface Member {
   id: number;
@@ -327,6 +338,17 @@ export default function FamilyHubPage() {
   const [previewDoc, setPreviewDoc] = useState<PersonalDocumentItem | null>(
     null
   );
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const [notifSettings, setNotifSettings] = useState<NotificationSettings>(
+    DEFAULT_NOTIFICATION_SETTINGS
+  );
+  const [notifPermission, setNotifPermission] = useState<
+    "granted" | "denied" | "prompt"
+  >("prompt");
+  const [upcomingReminders, setUpcomingReminders] = useState<
+    UpcomingReminderPreview[]
+  >([]);
+  const [notifStatusMsg, setNotifStatusMsg] = useState("");
 
   // Modal Form toggles & Editing IDs
   const [showExpenseForm, setShowExpenseForm] = useState(false);
@@ -503,6 +525,71 @@ export default function FamilyHubPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monthlyKey, yearlyKey]);
 
+  // Khởi tạo cấu hình thông báo và kiểm tra quyền trên Android APK / Web
+  useEffect(() => {
+    const saved = loadNotificationSettings();
+    setNotifSettings(saved);
+    checkNotificationPermissionStatus().then((status) => {
+      setNotifPermission(status);
+      if (status === "prompt") {
+        requestNotificationPermission().then((newStatus) =>
+          setNotifPermission(newStatus)
+        );
+      }
+    });
+  }, []);
+
+  // Tự động đồng bộ lịch hẹn thông báo (Đón trẻ • Đóng tiền • Ngày giỗ) khi dữ liệu thay đổi
+  useEffect(() => {
+    if (loading || !currentUser) return;
+    syncFamilyNotifications({
+      expenses,
+      schedules,
+      events,
+      settings: notifSettings,
+    }).then((previews) => {
+      setUpcomingReminders(previews);
+    });
+  }, [expenses, schedules, events, notifSettings, loading, currentUser]);
+
+  function handleUpdateNotifSettings(patch: Partial<NotificationSettings>) {
+    setNotifSettings((prev) => {
+      const next = { ...prev, ...patch };
+      saveNotificationSettings(next);
+      return next;
+    });
+    setNotifStatusMsg("Đã lưu cài đặt và cập nhật lịch hẹn thông báo!");
+    setTimeout(() => setNotifStatusMsg(""), 3000);
+  }
+
+  async function handleEnableNotifications() {
+    const status = await requestNotificationPermission();
+    setNotifPermission(status);
+    if (status === "granted") {
+      const previews = await syncFamilyNotifications({
+        expenses,
+        schedules,
+        events,
+        settings: notifSettings,
+      });
+      setUpcomingReminders(previews);
+      setNotifStatusMsg(
+        `Đã bật quyền thông báo và kích hoạt ${previews.length} lịch nhắc tự động!`
+      );
+    } else {
+      setNotifStatusMsg(
+        "Chưa cấp quyền thông báo. Vui lòng bật quyền Thông báo trong Cài đặt ứng dụng trên điện thoại!"
+      );
+    }
+  }
+
+  async function handleTestNotificationNow() {
+    const res = await sendTestNotification(upcomingReminders.length);
+    const status = await checkNotificationPermissionStatus();
+    setNotifPermission(status);
+    setNotifStatusMsg(res.message);
+  }
+
   // Tự động ẩn Topbar khi cuộn trang xuống hoặc xem chi tiết, hiện lại khi cuộn lên đầu trang
   useEffect(() => {
     function handleScroll() {
@@ -528,6 +615,7 @@ export default function FamilyHubPage() {
     historyModalExpense ||
       historyModalIncome ||
       previewDoc ||
+      showNotificationModal ||
       showExpenseForm ||
       showIncomeForm ||
       showScheduleForm ||
@@ -1099,6 +1187,29 @@ export default function FamilyHubPage() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setNotifStatusMsg("");
+                setShowNotificationModal(true);
+              }}
+              aria-label="Cài đặt thông báo nhắc lịch"
+              title="Cài đặt chuông thông báo nhắc lịch (Giỗ, Đóng tiền, Đón trẻ)"
+              className={`btn-3d px-2.5 py-1.5 md:px-3.5 md:py-2 text-xs md:text-sm relative ${
+                notifSettings.enabled && notifPermission === "granted"
+                  ? "bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300"
+                  : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300"
+              }`}
+            >
+              <BellRing className="w-4 h-4 text-amber-600" aria-hidden="true" />
+              <span className="hidden sm:inline">Nhắc lịch</span>
+              {notifSettings.enabled && upcomingReminders.length > 0 && (
+                <span className="inline-flex items-center justify-center px-1.5 py-0.2 rounded-full bg-amber-600 text-white text-[10px] font-extrabold tabular-nums">
+                  {upcomingReminders.length}
+                </span>
+              )}
+            </button>
+
             {currentUser && (
               <div className="badge-3d bg-slate-50 border-slate-200 px-2.5 py-1 md:px-3 md:py-1.5 flex items-center gap-1.5 md:gap-2 text-xs md:text-sm">
                 <span
@@ -4254,6 +4365,300 @@ export default function FamilyHubPage() {
                     alt="Mặt sau"
                     className="w-full rounded-xl border border-slate-200"
                   />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CÀI ĐẶT THÔNG BÁO NHẮC LỊCH TỰ ĐỘNG (GIỖ • ĐÓNG TIỀN • ĐƯA ĐÓN TRẺ) */}
+      {showNotificationModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="notification-modal-title"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+        >
+          <div className="card-3d bg-white w-full max-w-2xl p-5 md:p-6 max-h-[90vh] overflow-y-auto shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3.5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 border border-amber-200 flex items-center justify-center shrink-0">
+                  <BellRing className="w-5 h-5" aria-hidden="true" />
+                </div>
+                <div>
+                  <h3
+                    id="notification-modal-title"
+                    className="text-base md:text-lg font-extrabold text-slate-900"
+                  >
+                    Chuông Thông Báo Nhắc Lịch Gia Đình
+                  </h3>
+                  <p className="text-xs font-medium text-slate-600">
+                    Tự động báo trên điện thoại Android cho Lịch đón trẻ, Lịch đóng tiền và Ngày giỗ/lễ
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label="Đóng cài đặt thông báo"
+                onClick={() => setShowNotificationModal(false)}
+                className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" aria-hidden="true" />
+              </button>
+            </div>
+
+            {/* Trạng thái cấp quyền thông báo trên điện thoại */}
+            <div
+              className={`card-3d-sm p-4 flex flex-wrap items-center justify-between gap-3 ${
+                notifPermission === "granted"
+                  ? "bg-emerald-50/80 border-emerald-200"
+                  : "bg-amber-50/90 border-amber-300"
+              }`}
+            >
+              <div className="space-y-0.5">
+                <div className="text-xs font-extrabold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                  <Smartphone className="w-4 h-4 text-blue-600" aria-hidden="true" />
+                  <span>
+                    Quyền thông báo trên thiết bị:{" "}
+                    {notifPermission === "granted"
+                      ? "ĐÃ KÍCH HOẠT"
+                      : "CHƯA CẤP QUYỀN"}
+                  </span>
+                </div>
+                <p className="text-xs font-medium text-slate-600">
+                  {notifPermission === "granted"
+                    ? `Đang đặt hẹn giờ tự động ${upcomingReminders.length} mốc nhắc lịch sắp tới.`
+                    : "Bấm nút 'Cấp Quyền Chuông Báo' bên cạnh để ứng dụng được phép đổ chuông nhắc trên điện thoại."}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {notifPermission !== "granted" && (
+                  <button
+                    type="button"
+                    onClick={handleEnableNotifications}
+                    className="btn-3d bg-blue-600 hover:bg-blue-700 text-white border-blue-600 px-3.5 py-2 text-xs"
+                  >
+                    <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
+                    <span>Cấp Quyền Chuông Báo</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleTestNotificationNow}
+                  className="btn-3d bg-amber-500 hover:bg-amber-600 text-white border-amber-600 px-3.5 py-2 text-xs"
+                >
+                  <BellRing className="w-4 h-4" aria-hidden="true" />
+                  <span>Bắn thử thông báo ngay</span>
+                </button>
+              </div>
+            </div>
+
+            {notifStatusMsg && (
+              <div
+                role="status"
+                className="card-3d-sm bg-blue-50 border-blue-200 p-3 text-xs font-bold text-blue-900 flex items-center gap-2"
+              >
+                <Sparkles className="w-4 h-4 text-blue-600 shrink-0" aria-hidden="true" />
+                <span>{notifStatusMsg}</span>
+              </div>
+            )}
+
+            {/* Bật / Tắt từng nhóm nhắc lịch */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 bg-slate-50/70">
+                <div>
+                  <div className="font-bold text-sm text-slate-900">
+                    Bật tính năng Tự động Nhắc lịch Gia đình
+                  </div>
+                  <div className="text-xs font-medium text-slate-600">
+                    Khi bật, điện thoại sẽ tự động hẹn giờ báo cho 3 mục bên dưới
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  aria-label="Bật tính năng Tự động Nhắc lịch Gia đình"
+                  checked={notifSettings.enabled}
+                  onChange={(e) =>
+                    handleUpdateNotifSettings({ enabled: e.target.checked })
+                  }
+                  className="w-5 h-5 accent-blue-600 cursor-pointer"
+                />
+              </div>
+
+              {/* 1. Nhắc lịch đưa đón trẻ */}
+              <div className="card-3d-sm p-4 bg-white space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <GraduationCap className="w-4 h-4 text-sky-600 shrink-0" aria-hidden="true" />
+                    <span className="font-bold text-sm text-slate-900">
+                      1. Nhắc lịch Đưa & Đón trẻ đi học
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    aria-label="Bật nhắc lịch đưa đón trẻ"
+                    checked={notifSettings.enableSchedules}
+                    disabled={!notifSettings.enabled}
+                    onChange={(e) =>
+                      handleUpdateNotifSettings({
+                        enableSchedules: e.target.checked,
+                      })
+                    }
+                    className="w-5 h-5 accent-blue-600 cursor-pointer"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-medium text-slate-600">
+                  <span>
+                    Báo trước giờ vào học (đưa đi) và trước giờ tan học (đón về):
+                  </span>
+                  <select
+                    aria-label="Số phút báo trước giờ đưa đón trẻ"
+                    value={notifSettings.scheduleLeadMinutes}
+                    disabled={
+                      !notifSettings.enabled || !notifSettings.enableSchedules
+                    }
+                    onChange={(e) =>
+                      handleUpdateNotifSettings({
+                        scheduleLeadMinutes: Number(e.target.value),
+                      })
+                    }
+                    className="badge-3d bg-sky-50 text-sky-900 border-sky-200 px-3 py-1.5 font-bold cursor-pointer"
+                  >
+                    <option value={10}>Trước 10 phút</option>
+                    <option value={15}>Trước 15 phút</option>
+                    <option value={20}>Trước 20 phút</option>
+                    <option value={30}>Trước 30 phút</option>
+                    <option value={45}>Trước 45 phút</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* 2. Nhắc lịch đóng tiền định kỳ */}
+              <div className="card-3d-sm p-4 bg-white space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Wallet className="w-4 h-4 text-amber-600 shrink-0" aria-hidden="true" />
+                    <span className="font-bold text-sm text-slate-900">
+                      2. Nhắc lịch Đóng tiền định kỳ (Các khoản chưa đóng)
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    aria-label="Bật nhắc lịch đóng tiền định kỳ"
+                    checked={notifSettings.enableExpenses}
+                    disabled={!notifSettings.enabled}
+                    onChange={(e) =>
+                      handleUpdateNotifSettings({
+                        enableExpenses: e.target.checked,
+                      })
+                    }
+                    className="w-5 h-5 accent-blue-600 cursor-pointer"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-medium text-slate-600">
+                  <span>
+                    Tự động nhắc trước 3 ngày, 1 ngày và đúng ngày hạn đóng vào lúc:
+                  </span>
+                  <select
+                    aria-label="Giờ nhắc đóng tiền định kỳ"
+                    value={notifSettings.expenseNotifyHour}
+                    disabled={
+                      !notifSettings.enabled || !notifSettings.enableExpenses
+                    }
+                    onChange={(e) =>
+                      handleUpdateNotifSettings({
+                        expenseNotifyHour: Number(e.target.value),
+                      })
+                    }
+                    className="badge-3d bg-amber-50 text-amber-900 border-amber-200 px-3 py-1.5 font-bold cursor-pointer"
+                  >
+                    <option value={7}>07:00 sáng</option>
+                    <option value={8}>08:00 sáng</option>
+                    <option value={9}>09:00 sáng</option>
+                    <option value={19}>19:00 tối</option>
+                    <option value={20}>20:00 tối</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* 3. Nhắc lịch Giỗ & Sự kiện Âm/Dương */}
+              <div className="card-3d-sm p-4 bg-white space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <CalendarClock className="w-4 h-4 text-rose-600 shrink-0" aria-hidden="true" />
+                    <span className="font-bold text-sm text-slate-900">
+                      3. Nhắc lịch Giỗ & Sự kiện Âm/Dương
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    aria-label="Bật nhắc lịch giỗ và sự kiện"
+                    checked={notifSettings.enableEvents}
+                    disabled={!notifSettings.enabled}
+                    onChange={(e) =>
+                      handleUpdateNotifSettings({
+                        enableEvents: e.target.checked,
+                      })
+                    }
+                    className="w-5 h-5 accent-blue-600 cursor-pointer"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-medium text-slate-600">
+                  <span>
+                    Quy đổi Âm sang Dương, nhắc trước ngày giỗ và sáng ngày giỗ lúc:
+                  </span>
+                  <select
+                    aria-label="Giờ nhắc lịch giỗ và sự kiện"
+                    value={notifSettings.eventNotifyHour}
+                    disabled={
+                      !notifSettings.enabled || !notifSettings.enableEvents
+                    }
+                    onChange={(e) =>
+                      handleUpdateNotifSettings({
+                        eventNotifyHour: Number(e.target.value),
+                      })
+                    }
+                    className="badge-3d bg-rose-50 text-rose-900 border-rose-200 px-3 py-1.5 font-bold cursor-pointer"
+                  >
+                    <option value={6}>06:30 sáng</option>
+                    <option value={7}>07:30 sáng</option>
+                    <option value={8}>08:30 sáng</option>
+                    <option value={18}>18:30 chiều</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Danh sách các thông báo sắp đổ chuông gần nhất */}
+            <div>
+              <div className="text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-2">
+                Danh sách chuông báo sắp tới ({upcomingReminders.length} lịch hẹn)
+              </div>
+              {upcomingReminders.length === 0 ? (
+                <div className="card-3d-sm p-4 bg-slate-50 text-center text-xs font-medium text-slate-500">
+                  Hiện chưa có lịch hẹn nào trong thời gian tới (hoặc tính năng nhắc lịch đang tắt).
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {upcomingReminders.slice(0, 15).map((item) => (
+                    <div
+                      key={item.id}
+                      className="card-3d-sm p-3 bg-slate-50/90 border-slate-200 flex items-start justify-between gap-2.5"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-bold text-xs md:text-sm text-slate-900">
+                          {item.title}
+                        </div>
+                        <div className="text-xs font-medium text-slate-600 mt-0.5">
+                          {item.body}
+                        </div>
+                      </div>
+                      <span className="badge-3d bg-white text-blue-700 border-blue-200 px-2.5 py-1 text-[11px] shrink-0 tabular-nums">
+                        {item.timeLabel}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
