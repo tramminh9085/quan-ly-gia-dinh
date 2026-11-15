@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   /* Primitive & Semantic Color Tokens (ui-ux-pro-max #137 Family + #91 Finance) */
   --bg-main: #f8fafc;

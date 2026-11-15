@@ -1503,15 +1503,20 @@ export default function FamilyHubPage() {
                 Khoản đóng định kỳ
               </div>
               <div className="text-base md:text-lg font-extrabold text-slate-900 dark:text-white mt-1">
-                {financeSummary.unpaidCount > 0
-                  ? `Còn ${financeSummary.unpaidCount} khoản chưa đóng`
-                  : "Đã hoàn tất mọi khoản!"}
+                {financeSummary.paidCount === expenses.length && expenses.length > 0
+                  ? `Đã hoàn tất ${financeSummary.paidCount}/${expenses.length} khoản!`
+                  : `Còn ${financeSummary.paidCount}/${expenses.length} khoản chưa đóng`}
               </div>
               <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 mt-1 tabular-nums">
                 Cần đóng:{" "}
                 <span className="font-bold text-amber-900 dark:text-amber-300">
-                  {formatVND(financeSummary.totalUnpaid)}
+                  {formatVND(financeSummary.totalDue)}
                 </span>
+                {financeSummary.totalUnpaid > 0 && (
+                  <span className="ml-1 text-slate-500 dark:text-slate-400">
+                    (Còn thiếu: <strong className="text-rose-600 dark:text-rose-400 font-bold">{formatVND(financeSummary.totalUnpaid)}</strong>)
+                  </span>
+                )}
               </div>
             </div>
             <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/60 flex items-center justify-center shrink-0">
