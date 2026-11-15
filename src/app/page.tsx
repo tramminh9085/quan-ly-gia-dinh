@@ -366,7 +366,7 @@ export default function FamilyHubPage() {
 
   // Filters
   const [expenseCycleFilter, setExpenseCycleFilter] = useState<
-    "all" | "monthly" | "yearly"
+    "all" | "unpaid" | "paid" | "monthly" | "yearly"
   >("all");
   const [scheduleChildFilter, setScheduleChildFilter] = useState<string>("all");
   const [scheduleDayFilter, setScheduleDayFilter] = useState<number>(0); // 0 = Tất cả
@@ -752,8 +752,11 @@ export default function FamilyHubPage() {
     const totalDue = expenses.reduce((s, e) => s + Number(e.amount), 0);
     const totalPaid = expenses
       .filter((e) => e.isPaid)
-      .reduce((s, e) => s + Number(e.payment?.paidAmount || e.amount), 0);
-    const totalUnpaid = Math.max(0, totalDue - totalPaid);
+      .reduce((s, e) => s + Number(e.payment?.paidAmount ?? e.amount), 0);
+    // Số tiền còn thiếu được tính chính xác từ tổng các khoản chưa đóng
+    const totalUnpaid = expenses
+      .filter((e) => !e.isPaid)
+      .reduce((s, e) => s + Number(e.amount), 0);
     const paidCount = expenses.filter((e) => e.isPaid).length;
     const unpaidCount = expenses.length - paidCount;
     const progressPercent =
@@ -1308,6 +1311,8 @@ export default function FamilyHubPage() {
 
   const filteredExpenses = useMemo(() => {
     if (expenseCycleFilter === "all") return expenses;
+    if (expenseCycleFilter === "unpaid") return expenses.filter((e) => !e.isPaid);
+    if (expenseCycleFilter === "paid") return expenses.filter((e) => e.isPaid);
     return expenses.filter((e) => e.cycle === expenseCycleFilter);
   }, [expenses, expenseCycleFilter]);
 
@@ -1495,7 +1500,12 @@ export default function FamilyHubPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <button
             type="button"
-            onClick={() => setActiveTab("finance")}
+            onClick={() => {
+              setActiveTab("finance");
+              if (financeSummary.unpaidCount > 0) {
+                setExpenseCycleFilter("unpaid");
+              }
+            }}
             className="card-3d card-3d-interactive p-5 bg-gradient-to-br from-white via-white to-amber-50/70 border-amber-200/80 dark:from-[#131c31] dark:via-[#131c31] dark:to-amber-950/40 dark:border-amber-800/60 text-left flex items-center justify-between gap-3"
           >
             <div className="min-w-0">
@@ -1719,10 +1729,23 @@ export default function FamilyHubPage() {
                 </button>
               </div>
 
-              {/* Bộ lọc Tháng / Năm */}
+              {/* Bộ lọc Khoản Đóng: Tất cả / Chưa đóng / Đã đóng / Hàng tháng / Hàng năm */}
               <div className="flex flex-wrap gap-2 mb-5">
                 {[
                   { id: "all", label: `Tất cả (${expenses.length})` },
+                  {
+                    id: "unpaid",
+                    label: `Chưa đóng (${
+                      expenses.filter((e) => !e.isPaid).length
+                    })`,
+                    isWarning: true,
+                  },
+                  {
+                    id: "paid",
+                    label: `Đã đóng (${
+                      expenses.filter((e) => e.isPaid).length
+                    })`,
+                  },
                   {
                     id: "monthly",
                     label: `Theo Tháng (${
@@ -1741,13 +1764,17 @@ export default function FamilyHubPage() {
                     type="button"
                     onClick={() =>
                       setExpenseCycleFilter(
-                        f.id as "all" | "monthly" | "yearly"
+                        f.id as "all" | "unpaid" | "paid" | "monthly" | "yearly"
                       )
                     }
-                    className={`btn-3d px-4 py-2 text-xs md:text-sm ${
+                    className={`btn-3d px-3.5 py-2 text-xs md:text-sm ${
                       expenseCycleFilter === f.id
-                        ? "bg-slate-900 text-white border-slate-900"
-                        : "bg-slate-100 hover:bg-slate-200/80 text-slate-700 border-slate-200"
+                        ? f.id === "unpaid"
+                          ? "bg-amber-600 text-white border-amber-600 shadow-sm"
+                          : "bg-slate-900 text-white border-slate-900"
+                        : f.id === "unpaid"
+                        ? "bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                        : "bg-slate-100 hover:bg-slate-200/80 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
                     }`}
                   >
                     {f.label}
@@ -2053,6 +2080,17 @@ export default function FamilyHubPage() {
                     </div>
                   );
                 })}
+
+                {filteredExpenses.length === 0 && (
+                  <div className="col-span-1 md:col-span-2 p-8 text-center bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
+                    <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-2" aria-hidden="true" />
+                    <p className="font-bold text-slate-700 dark:text-slate-300">
+                      {expenseCycleFilter === "unpaid"
+                        ? "Tuyệt vời! Bạn không còn khoản nào chưa đóng trong kỳ này."
+                        : "Không có khoản đóng nào phù hợp với bộ lọc đã chọn."}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
