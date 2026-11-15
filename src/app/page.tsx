@@ -107,6 +107,8 @@ interface IncomeItem {
   amount: number;
   cycle: "monthly" | "quarterly" | "yearly";
   periodKey: string;
+  dueDate?: string;
+  nextDueDate?: string;
   receivedBy: number | null;
   receivedByName: string;
   note: string;
@@ -204,6 +206,55 @@ const DAY_NAMES: Record<number, string> = {
   6: "Thứ 7",
   7: "Chủ Nhật",
 };
+
+function getTodayInfo() {
+  const now = new Date();
+  const lunar = solarToLunar(
+    now.getDate(),
+    now.getMonth() + 1,
+    now.getFullYear()
+  );
+  const jsDay = now.getDay(); // 0=CN, 1=T2, 2=T3, 3=T4, 4=T5, 5=T6, 6=T7
+  const isoDay = jsDay === 0 ? 7 : jsDay;
+  return {
+    solarStr: `${DAY_NAMES[isoDay]}, ${String(now.getDate()).padStart(
+      2,
+      "0"
+    )}/${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()}`,
+    lunarStr: `Ngày ${String(lunar.day).padStart(2, "0")}/${String(
+      lunar.month
+    ).padStart(2, "0")} Âm lịch (Năm ${lunar.canChiYear})`,
+    isoDay,
+  };
+}
+
+function addThreeMonths(dateStr: string): string {
+  if (!dateStr) return "";
+  try {
+    const parts = dateStr.split("-").map(Number);
+    if (parts.length < 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) {
+      return "";
+    }
+    const [y, m, d] = parts;
+    const dt = new Date(y, m - 1, d);
+    dt.setMonth(dt.getMonth() + 3);
+    const nextY = dt.getFullYear();
+    const nextM = String(dt.getMonth() + 1).padStart(2, "0");
+    const nextD = String(dt.getDate()).padStart(2, "0");
+    return `${nextY}-${nextM}-${nextD}`;
+  } catch {
+    return "";
+  }
+}
+
+function formatDateDisplay(dateStr: string): string {
+  if (!dateStr) return "";
+  const parts = dateStr.split("-");
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return dateStr;
+}
 
 function formatVND(amount: number): string {
   return new Intl.NumberFormat("vi-VN").format(amount) + " đ";
@@ -434,6 +485,8 @@ export default function FamilyHubPage() {
   const [incCycle, setIncCycle] = useState<"monthly" | "quarterly" | "yearly">(
     "monthly"
   );
+  const [incDueDate, setIncDueDate] = useState("");
+  const [incNextDueDate, setIncNextDueDate] = useState("");
   const [incReceivedBy, setIncReceivedBy] = useState<number>(1);
   const [incNote, setIncNote] = useState("");
 
@@ -504,26 +557,31 @@ export default function FamilyHubPage() {
   const [memberError, setMemberError] = useState("");
   const [memberSuccess, setMemberSuccess] = useState("");
 
-  // Thông tin ngày Âm - Dương hôm nay
-  const todayInfo = useMemo(() => {
-    const now = new Date();
-    const lunar = solarToLunar(
-      now.getDate(),
-      now.getMonth() + 1,
-      now.getFullYear()
-    );
-    const jsDay = now.getDay(); // 0=CN, 1=T2...
-    const isoDay = jsDay === 0 ? 7 : jsDay;
-    return {
-      solarStr: `${DAY_NAMES[isoDay]}, ${String(now.getDate()).padStart(
-        2,
-        "0"
-      )}/${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()}`,
-      lunarStr: `Ngày ${String(lunar.day).padStart(2, "0")}/${String(
-        lunar.month
-      ).padStart(2, "0")} Âm lịch (Năm ${lunar.canChiYear})`,
-      isoDay,
+  // Thông tin ngày Âm - Dương hôm nay (Tự động cập nhật tức thời khi chuyển ngày hoặc mở lại app)
+  const [todayInfo, setTodayInfo] = useState(getTodayInfo);
+
+  useEffect(() => {
+    const updateToday = () => setTodayInfo(getTodayInfo());
+    updateToday();
+    const timer = setInterval(updateToday, 60000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        updateToday();
+        loadAllData();
+      }
     };
+    const onFocus = () => {
+      updateToday();
+      loadAllData();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("focus", onFocus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadAllData() {
@@ -719,50 +777,143 @@ export default function FamilyHubPage() {
     return schedules.filter((s) => s.dayOfWeek === todayInfo.isoDay);
   }, [schedules, todayInfo.isoDay]);
 
-  // Toggle Đã đóng / Chưa đóng
+  // Toggle Đã đóng / Chưa đóng (Xử lý tức thì với Optimistic Update)
   async function handleTogglePay(exp: ExpenseItem) {
-    if (exp.isPaid) {
-      await fetch(
-        `/api/expenses/pay?expenseId=${exp.id}&periodKey=${exp.periodKey}`,
-        { method: "DELETE" }
+    const nextIsPaid = !exp.isPaid;
+    const nowIso = new Date().toISOString();
+
+    // 1. Cập nhật giao diện ngay lập tức (0ms)
+    setExpenses((prev) =>
+      prev.map((item) => {
+        if (item.id === exp.id) {
+          return {
+            ...item,
+            isPaid: nextIsPaid,
+            payment: nextIsPaid
+              ? {
+                  id: Date.now(),
+                  expenseId: exp.id,
+                  periodKey: exp.periodKey,
+                  paidAmount: exp.amount,
+                  paidBy: currentUser?.id || 1,
+                  paidByName: currentUser?.fullName || "Thành viên",
+                  paidAt: nowIso,
+                  note: `${currentUser?.fullName || "Thành viên"} đánh dấu đã đóng`,
+                }
+              : null,
+            history: nextIsPaid
+              ? [
+                  {
+                    id: Date.now(),
+                    periodKey: exp.periodKey,
+                    paidAmount: exp.amount,
+                    paidByName: currentUser?.fullName || "Thành viên",
+                    paidAt: nowIso,
+                  },
+                  ...item.history.filter((h) => h.periodKey !== exp.periodKey),
+                ]
+              : item.history.filter((h) => h.periodKey !== exp.periodKey),
+          };
+        }
+        return item;
+      })
+    );
+
+    // 2. Gửi request đồng bộ nền (Background Sync)
+    try {
+      if (!nextIsPaid) {
+        await fetch(
+          `/api/expenses/pay?expenseId=${exp.id}&periodKey=${exp.periodKey}`,
+          { method: "DELETE" }
+        );
+      } else {
+        await fetch("/api/expenses/pay", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            expenseId: exp.id,
+            periodKey: exp.periodKey,
+            paidAmount: exp.amount,
+            paidBy: currentUser?.id || 1,
+            note: `${currentUser?.fullName || "Thành viên"} đánh dấu đã đóng`,
+          }),
+        });
+      }
+    } catch (err) {
+      console.error("Lỗi khi cập nhật thanh toán:", err);
+      // Revert lại trạng thái cũ nếu gặp sự cố mạng
+      setExpenses((prev) =>
+        prev.map((item) => (item.id === exp.id ? exp : item))
       );
-    } else {
-      await fetch("/api/expenses/pay", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          expenseId: exp.id,
-          periodKey: exp.periodKey,
-          paidAmount: exp.amount,
-          paidBy: currentUser?.id || 1,
-          note: `${currentUser?.fullName || "Thành viên"} đánh dấu đã đóng`,
-        }),
-      });
     }
-    await loadAllData();
   }
 
-  // Toggle Đã thu / Chưa thu theo kỳ
+  // Toggle Đã thu / Chưa thu theo kỳ (Xử lý tức thì với Optimistic Update)
   async function handleToggleReceiveIncome(inc: IncomeItem) {
-    if (inc.isReceived) {
-      await fetch(
-        `/api/incomes/receive?incomeId=${inc.id}&periodKey=${inc.periodKey}`,
-        { method: "DELETE" }
+    const nextIsReceived = !inc.isReceived;
+    const nowIso = new Date().toISOString();
+
+    // 1. Cập nhật giao diện ngay lập tức (0ms)
+    setIncomes((prev) =>
+      prev.map((item) => {
+        if (item.id === inc.id) {
+          return {
+            ...item,
+            isReceived: nextIsReceived,
+            receipt: nextIsReceived
+              ? {
+                  id: Date.now(),
+                  receivedAmount: inc.amount,
+                  receivedByName: currentUser?.fullName || "Thành viên",
+                  receivedAt: nowIso,
+                  note: `${currentUser?.fullName || "Thành viên"} đánh dấu đã thu`,
+                }
+              : null,
+            history: nextIsReceived
+              ? [
+                  {
+                    id: Date.now(),
+                    periodKey: inc.periodKey,
+                    receivedAmount: inc.amount,
+                    receivedByName: currentUser?.fullName || "Thành viên",
+                    receivedAt: nowIso,
+                  },
+                  ...item.history.filter((h) => h.periodKey !== inc.periodKey),
+                ]
+              : item.history.filter((h) => h.periodKey !== inc.periodKey),
+          };
+        }
+        return item;
+      })
+    );
+
+    // 2. Gửi request đồng bộ nền (Background Sync)
+    try {
+      if (!nextIsReceived) {
+        await fetch(
+          `/api/incomes/receive?incomeId=${inc.id}&periodKey=${inc.periodKey}`,
+          { method: "DELETE" }
+        );
+      } else {
+        await fetch("/api/incomes/receive", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            incomeId: inc.id,
+            periodKey: inc.periodKey,
+            receivedAmount: inc.amount,
+            receivedBy: currentUser?.id || inc.receivedBy || 1,
+            note: `${currentUser?.fullName || "Thành viên"} đánh dấu đã thu`,
+          }),
+        });
+      }
+    } catch (err) {
+      console.error("Lỗi khi cập nhật thu tiền:", err);
+      // Revert lại trạng thái cũ nếu mạng gặp sự cố
+      setIncomes((prev) =>
+        prev.map((item) => (item.id === inc.id ? inc : item))
       );
-    } else {
-      await fetch("/api/incomes/receive", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          incomeId: inc.id,
-          periodKey: inc.periodKey,
-          receivedAmount: inc.amount,
-          receivedBy: currentUser?.id || inc.receivedBy || 1,
-          note: `${currentUser?.fullName || "Thành viên"} đánh dấu đã thu`,
-        }),
-      });
     }
-    await loadAllData();
   }
 
   // Thêm hoặc sửa khoản đóng định kỳ (Tháng / Năm)
@@ -818,6 +969,10 @@ export default function FamilyHubPage() {
     setIncTitle(inc.title);
     setIncAmount(String(inc.amount));
     setIncCycle(inc.cycle);
+    setIncDueDate(inc.dueDate || "");
+    setIncNextDueDate(
+      inc.nextDueDate || (inc.dueDate ? addThreeMonths(inc.dueDate) : "")
+    );
     setIncReceivedBy(inc.receivedBy || currentUser?.id || 1);
     setIncNote(inc.note || "");
     setShowIncomeForm(true);
@@ -828,12 +983,19 @@ export default function FamilyHubPage() {
     setIncTitle("");
     setIncAmount("");
     setIncCycle("monthly");
+    setIncDueDate("");
+    setIncNextDueDate("");
     setIncNote("");
     setShowIncomeForm(false);
   }
 
   async function handleCreateIncome(e: React.FormEvent) {
     e.preventDefault();
+    const computedNextDueDate =
+      incCycle === "quarterly" && incDueDate
+        ? (incNextDueDate || addThreeMonths(incDueDate))
+        : "";
+
     const res = await fetch("/api/incomes", {
       method: editingIncomeId ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
@@ -848,6 +1010,8 @@ export default function FamilyHubPage() {
             : incCycle === "quarterly"
             ? defaultPeriods.quarterly
             : yearlyKey,
+        dueDate: incCycle === "quarterly" ? incDueDate : "",
+        nextDueDate: computedNextDueDate,
         receivedBy: incReceivedBy,
         note: incNote,
       }),
@@ -1487,71 +1651,6 @@ export default function FamilyHubPage() {
            ===================================================================== */}
         {activeTab === "finance" && (
           <div className="space-y-6">
-            {/* 4 Thẻ thống kê Bento Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="card-3d p-5 bg-gradient-to-br from-emerald-600 to-teal-700 text-white border-emerald-500/30">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-100">
-                    Tổng thu tháng này
-                  </span>
-                  <ArrowUpCircle className="w-5 h-5 text-emerald-200" aria-hidden="true" />
-                </div>
-                <div className="text-2xl font-extrabold mt-2 tabular-nums">
-                  {formatVND(financeSummary.monthlyIncomeTotal)}
-                </div>
-                <div className="text-xs font-medium mt-1.5 text-emerald-100 tabular-nums">
-                  + Quý: {formatVND(financeSummary.quarterlyIncomeTotal)} • Năm:{" "}
-                  {formatVND(financeSummary.yearlyIncomeTotal)}
-                </div>
-              </div>
-
-              <div className="card-3d p-5 bg-white dark:bg-[#131c31] dark:border-slate-800 text-slate-900 dark:text-white">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Tổng khoản phải đóng
-                  </span>
-                  <ArrowDownCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
-                </div>
-                <div className="text-2xl font-extrabold mt-2 text-slate-900 dark:text-white tabular-nums">
-                  {formatVND(financeSummary.totalDue)}
-                </div>
-                <div className="text-xs font-medium mt-1.5 text-slate-600 dark:text-slate-400">
-                  Tổng cộng {expenses.length} khoản định kỳ
-                </div>
-              </div>
-
-              <div className="card-3d p-5 bg-gradient-to-br from-white to-sky-50/80 border-sky-200/80 dark:from-[#131c31] dark:to-sky-950/40 dark:border-sky-800/60 text-slate-900 dark:text-white">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-sky-800 dark:text-sky-300">
-                    Đã đóng trong kỳ
-                  </span>
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-                </div>
-                <div className="text-2xl font-extrabold mt-2 text-emerald-700 dark:text-emerald-400 tabular-nums">
-                  {formatVND(financeSummary.totalPaid)}
-                </div>
-                <div className="text-xs font-semibold mt-1.5 text-slate-600 dark:text-slate-400 tabular-nums">
-                  Hoàn thành {financeSummary.paidCount}/{expenses.length} khoản (
-                  {financeSummary.progressPercent}%)
-                </div>
-              </div>
-
-              <div className="card-3d p-5 bg-gradient-to-br from-white to-amber-50/80 border-amber-200/80 dark:from-[#131c31] dark:to-amber-950/40 dark:border-amber-800/60 text-slate-900 dark:text-white">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-amber-900 dark:text-amber-300">
-                    Còn phải đóng
-                  </span>
-                  <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-                </div>
-                <div className="text-2xl font-extrabold mt-2 text-rose-600 dark:text-rose-400 tabular-nums">
-                  {formatVND(financeSummary.totalUnpaid)}
-                </div>
-                <div className="text-xs font-semibold mt-1.5 text-slate-600 dark:text-slate-400">
-                  Còn {financeSummary.unpaidCount} khoản chờ thanh toán
-                </div>
-              </div>
-            </div>
-
             {/* Thanh tiến độ đóng tiền định kỳ */}
             <div className="card-3d p-5 bg-white dark:bg-[#131c31] dark:border-slate-800">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
@@ -2041,11 +2140,15 @@ export default function FamilyHubPage() {
                       </label>
                       <select
                         value={incCycle}
-                        onChange={(e) =>
-                          setIncCycle(
-                            e.target.value as "monthly" | "quarterly" | "yearly"
-                          )
-                        }
+                        onChange={(e) => {
+                          const nextCycle = e.target.value as "monthly" | "quarterly" | "yearly";
+                          setIncCycle(nextCycle);
+                          if (nextCycle === "quarterly" && !incDueDate) {
+                            const todayStr = new Date().toISOString().split("T")[0];
+                            setIncDueDate(todayStr);
+                            setIncNextDueDate(addThreeMonths(todayStr));
+                          }
+                        }}
                         className="input-3d"
                       >
                         <option value="monthly">Thu Hàng Tháng</option>
@@ -2072,6 +2175,45 @@ export default function FamilyHubPage() {
                       </select>
                     </div>
                   </div>
+
+                  {incCycle === "quarterly" && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3.5 bg-sky-50/80 dark:bg-sky-950/40 rounded-xl border border-sky-200 dark:border-sky-800">
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-sky-900 dark:text-sky-300 mb-1.5 flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-sky-700 dark:text-sky-400" aria-hidden="true" />
+                          <span>Ngày thu trong quý này *</span>
+                        </label>
+                        <input
+                          type="date"
+                          required
+                          value={incDueDate}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setIncDueDate(val);
+                            if (val) {
+                              setIncNextDueDate(addThreeMonths(val));
+                            }
+                          }}
+                          className="input-3d bg-white dark:bg-slate-900"
+                        />
+                      </div>
+                      <div className="flex flex-col justify-center">
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5">
+                          Ngày thu tiếp theo (+3 tháng tự động)
+                        </span>
+                        <div className="px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 font-extrabold text-sky-800 dark:text-sky-300 text-sm flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" aria-hidden="true" />
+                          <span>
+                            {incNextDueDate
+                              ? formatDateDisplay(incNextDueDate)
+                              : incDueDate
+                              ? formatDateDisplay(addThreeMonths(incDueDate))
+                              : "Chọn ngày thu để tự động tính +3 tháng"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex justify-end gap-2">
                     {editingIncomeId && (
                       <button
@@ -2154,6 +2296,29 @@ export default function FamilyHubPage() {
                           Kỳ: <strong className="text-slate-800">{inc.periodKey}</strong>
                         </span>
                       </div>
+                      {inc.cycle === "quarterly" && (inc.dueDate || inc.nextDueDate) && (
+                        <div className="mt-2.5 text-xs font-semibold text-sky-900 dark:text-sky-200 bg-sky-50 dark:bg-sky-950/50 p-2.5 rounded-xl border border-sky-200 dark:border-sky-800 flex flex-col gap-1.5 tabular-nums">
+                          {inc.dueDate && (
+                            <div className="flex items-center gap-1.5">
+                              <Calendar className="w-3.5 h-3.5 text-sky-700 dark:text-sky-400 shrink-0" aria-hidden="true" />
+                              <span>
+                                Ngày thu đợt này: <strong>{formatDateDisplay(inc.dueDate)}</strong>
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-1.5 text-sky-700 dark:text-sky-300">
+                            <Clock className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400 shrink-0" aria-hidden="true" />
+                            <span>
+                              Ngày thu tiếp theo (+3 tháng):{" "}
+                              <strong>
+                                {formatDateDisplay(
+                                  inc.nextDueDate || (inc.dueDate ? addThreeMonths(inc.dueDate) : "")
+                                )}
+                              </strong>
+                            </span>
+                          </div>
+                        </div>
+                      )}
                       {inc.note && (
                         <div className="text-xs font-medium text-slate-600 mt-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 flex items-start gap-1.5">
                           <Lightbulb className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" aria-hidden="true" />

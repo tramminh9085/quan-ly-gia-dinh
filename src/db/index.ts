@@ -71,6 +71,8 @@ export interface IncomeRecord {
   amount: number;
   cycle: "monthly" | "quarterly" | "yearly";
   periodKey: string;
+  dueDate?: string;
+  nextDueDate?: string;
   receivedBy: number | null;
   note: string;
   createdAt: string;
@@ -683,10 +685,18 @@ export async function ensureNeonSchema() {
         amount BIGINT NOT NULL,
         cycle TEXT NOT NULL,
         period_key TEXT NOT NULL,
+        due_date TEXT DEFAULT '',
+        next_due_date TEXT DEFAULT '',
         received_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
         note TEXT DEFAULT '',
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
       );
+    `;
+    await sql`
+      ALTER TABLE incomes ADD COLUMN IF NOT EXISTS due_date TEXT DEFAULT '';
+    `;
+    await sql`
+      ALTER TABLE incomes ADD COLUMN IF NOT EXISTS next_due_date TEXT DEFAULT '';
     `;
     await sql`
       CREATE TABLE IF NOT EXISTS income_receipts (

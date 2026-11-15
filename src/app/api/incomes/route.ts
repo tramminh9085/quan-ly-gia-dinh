@@ -11,6 +11,26 @@ import { eq } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { getCurrentPeriodKeys } from "@/lib/lunar";
 
+// Tự động tính ngày thu tiếp theo (+3 tháng đối với khoản thu theo quý)
+function calculateNextQuarterDate(dateStr: string): string {
+  if (!dateStr) return "";
+  try {
+    const parts = dateStr.split("-").map(Number);
+    if (parts.length < 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) {
+      return "";
+    }
+    const [y, m, d] = parts;
+    const dt = new Date(y, m - 1, d);
+    dt.setMonth(dt.getMonth() + 3);
+    const nextY = dt.getFullYear();
+    const nextM = String(dt.getMonth() + 1).padStart(2, "0");
+    const nextD = String(dt.getDate()).padStart(2, "0");
+    return `${nextY}-${nextM}-${nextD}`;
+  } catch {
+    return "";
+  }
+}
+
 export async function GET(req: NextRequest) {
   await ensureNeonSchema();
   const user = await getCurrentUser();
@@ -52,8 +72,16 @@ export async function GET(req: NextRequest) {
             : "Gia đình",
         }));
 
+      const computedNextDueDate =
+        i.nextDueDate ||
+        (i.cycle === "quarterly" && i.dueDate
+          ? calculateNextQuarterDate(i.dueDate)
+          : "");
+
       return {
         ...i,
+        dueDate: i.dueDate || "",
+        nextDueDate: computedNextDueDate,
         periodKey: targetPeriod,
         receivedByName: i.receivedBy
           ? userMap.get(i.receivedBy) || "Thành viên"
@@ -96,8 +124,16 @@ export async function GET(req: NextRequest) {
             : "Gia đình",
         }));
 
+      const computedNextDueDate =
+        i.nextDueDate ||
+        (i.cycle === "quarterly" && i.dueDate
+          ? calculateNextQuarterDate(i.dueDate)
+          : "");
+
       return {
         ...i,
+        dueDate: i.dueDate || "",
+        nextDueDate: computedNextDueDate,
         periodKey: targetPeriod,
         receivedByName: i.receivedBy
           ? userMap.get(i.receivedBy) || "Thành viên"
@@ -146,6 +182,10 @@ export async function POST(req: NextRequest) {
       : defaults.yearly);
   const receivedBy = Number(body.receivedBy || user?.id || 1);
   const note = String(body.note || "").trim();
+  const dueDate = String(body.dueDate || "").trim();
+  const nextDueDate =
+    String(body.nextDueDate || "").trim() ||
+    (cycle === "quarterly" && dueDate ? calculateNextQuarterDate(dueDate) : "");
 
   if (!title || amount <= 0) {
     return NextResponse.json(
@@ -163,6 +203,8 @@ export async function POST(req: NextRequest) {
         amount,
         cycle,
         periodKey,
+        dueDate,
+        nextDueDate,
         receivedBy,
         note,
       })
@@ -177,6 +219,8 @@ export async function POST(req: NextRequest) {
       amount,
       cycle,
       periodKey,
+      dueDate,
+      nextDueDate,
       receivedBy,
       note,
       createdAt: new Date().toISOString(),
@@ -215,6 +259,10 @@ export async function PUT(req: NextRequest) {
       : defaults.yearly);
   const receivedBy = Number(body.receivedBy || user?.id || 1);
   const note = String(body.note || "").trim();
+  const dueDate = String(body.dueDate || "").trim();
+  const nextDueDate =
+    String(body.nextDueDate || "").trim() ||
+    (cycle === "quarterly" && dueDate ? calculateNextQuarterDate(dueDate) : "");
 
   if (!id || !title || amount <= 0) {
     return NextResponse.json(
@@ -227,7 +275,7 @@ export async function PUT(req: NextRequest) {
   if (db && isNeonConfigured()) {
     const updated = await db
       .update(incomes)
-      .set({ title, amount, cycle, periodKey, receivedBy, note })
+      .set({ title, amount, cycle, periodKey, dueDate, nextDueDate, receivedBy, note })
       .where(eq(incomes.id, id))
       .returning();
     return NextResponse.json({ ok: true, income: updated[0] });
@@ -246,6 +294,8 @@ export async function PUT(req: NextRequest) {
       amount,
       cycle,
       periodKey,
+      dueDate,
+      nextDueDate,
       receivedBy,
       note,
     };

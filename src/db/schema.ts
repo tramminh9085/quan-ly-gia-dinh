@@ -69,6 +69,8 @@ export const incomes = pgTable("incomes", {
   amount: bigint("amount", { mode: "number" }).notNull(),
   cycle: text("cycle").notNull(), // 'monthly' | 'quarterly' | 'yearly'
   periodKey: text("period_key").notNull(), // '2026-11', '2026-Q4' hoặc '2026'
+  dueDate: text("due_date").default(""), // Ngày thu cụ thể (YYYY-MM-DD)
+  nextDueDate: text("next_due_date").default(""), // Ngày thu tiếp theo (+3 tháng nếu là quý)
   receivedBy: integer("received_by").references(() => users.id, {
     onDelete: "set null",
   }),
